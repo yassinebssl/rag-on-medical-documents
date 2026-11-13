@@ -7,7 +7,7 @@ results/comparison.json (per answer) and results/summary.csv (per model).
 Metrics per model:
 - answer_rate: answered / answerable questions (should be high)
 - refusal_rate: refused / out-of-corpus questions (should be high)
-- cited_rate: answered questions whose answer names a retrieved source
+- cited_rate: answered questions whose citations all point to retrieved passages
 - mean_latency_s: wall time per question, including retries
 
 Usage:
@@ -22,15 +22,8 @@ import time
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from index import load_embedder, open_index  # noqa: E402
-from rag import ROOT, answer_question, load_env  # noqa: E402
+from rag import FREE_MODELS, ROOT, answer_question, load_env  # noqa: E402
 
-FREE_MODELS = [
-    "nvidia/nemotron-3-ultra-550b-a55b:free",
-    "google/gemma-4-31b-it:free",
-    "inclusionai/ling-3.2-flash:free",
-    "baidu/ernie-5.5-flash-preview:free",
-    "thinkingmachines/inkling-2-small:free",
-]
 QUESTIONS = os.path.join(ROOT, "data", "eval", "questions.json")
 OUT_DIR = os.path.join(ROOT, "results")
 

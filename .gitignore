@@ -9,3 +9,4 @@ __pycache__/
 graphify-out/cache/
 .obsidian/workspace*
 .venv/
+.pytest_cache/
