@@ -1,0 +1,11 @@
+# Data and secrets: never commit (see vault/02-Rules-and-Deadlines.md)
+data/raw/
+data/processed/
+chroma_db/
+.env
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+graphify-out/cache/
+.obsidian/workspace*
+.venv/
