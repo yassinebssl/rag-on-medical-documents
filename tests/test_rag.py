@@ -23,6 +23,15 @@ def test_format_context_numbers_passages_from_one():
         "[2] Paracetamol dosing in adults.\nParacetamol 1 g.")
 
 
+def test_format_context_turns_reference_markers_of_the_text_into_parentheses():
+    hit = {**PMC, "text": "Paracetamol 1 g [3]. See also [12] and [3, 4]."}
+    out = rag.format_context([WHO, hit])
+    assert "[1] WHO_09.pdf" in out and "[2] Paracetamol dosing in adults." in out
+    assert "Paracetamol 1 g (3). See also (12) and (3, 4)." in out
+    assert rag.cited_numbers(out) == [1, 2]
+    assert hit["text"] == "Paracetamol 1 g [3]. See also [12] and [3, 4]."
+
+
 def test_cited_numbers_accepts_single_adjacent_and_comma_forms():
     assert rag.cited_numbers("A [2]. B [1][3]. C [1, 4].") == [1, 2, 3, 4]
     assert rag.cited_numbers("no citation, dose is 500 mg") == []
@@ -103,7 +112,7 @@ def http_error(code):
 
 
 def fake_urlopen(monkeypatch, outcomes):
-    """Patch urlopen to play outcomes in order (message text or exception); return the calls made."""
+    """Patch urlopen to play outcomes in order (message text, raw JSON body dict or exception); return the calls made."""
     calls = []
 
     def urlopen(req, timeout):
@@ -112,7 +121,8 @@ def fake_urlopen(monkeypatch, outcomes):
         out = outcomes[len(calls) - 1]
         if isinstance(out, Exception):
             raise out
-        return io.BytesIO(json.dumps({"choices": [{"message": {"content": out}}]}).encode("utf-8"))
+        body = out if isinstance(out, dict) else {"choices": [{"message": {"content": out}}]}
+        return io.BytesIO(json.dumps(body).encode("utf-8"))
 
     monkeypatch.setattr(rag.urllib.request, "urlopen", urlopen)
     monkeypatch.setattr(rag.time, "sleep", lambda seconds: None)
@@ -143,6 +153,15 @@ def test_call_llm_raises_runtime_error_when_always_empty(monkeypatch):
     with pytest.raises(RuntimeError) as excinfo:
         rag.call_llm("p", rag.DEFAULT_MODEL, "k", retries=2)
     assert rag.DEFAULT_MODEL in str(excinfo.value)
+    assert len(calls) == 2
+
+
+def test_call_llm_reports_the_error_field_of_a_200_reply(monkeypatch):
+    error = {"error": {"message": "rate limited", "code": 429}}
+    calls = fake_urlopen(monkeypatch, [error, error])
+    with pytest.raises(RuntimeError) as excinfo:
+        rag.call_llm("p", rag.DEFAULT_MODEL, "k", retries=2)
+    assert "rate limited" in str(excinfo.value) and rag.DEFAULT_MODEL in str(excinfo.value)
     assert len(calls) == 2
 
 
@@ -180,3 +199,16 @@ def test_hybrid_answer_question_gates_on_dense_similarity_and_fuses(monkeypatch)
     assert res["reason"] == "answered" and abs(res["best_similarity"] - 0.75) < 1e-9
     assert [h["id"] for h in res["hits"]] == ["b", "a"]   # b: ranks 2 and 1; a: rank 1 only
     assert len(res["hits"]) <= rag.TOP_K
+
+
+def test_hybrid_answer_question_refuses_below_threshold_even_when_bm25_matches(monkeypatch):
+    from bm25 import BM25
+    from index import all_chunks
+    coll = FakeCollection(rows(0.45))   # best dense similarity 0.55
+    bm25 = BM25(all_chunks(coll))
+    assert bm25.search("paracetamol", rag.CANDIDATES)[0]["id"] == "b"
+    monkeypatch.setattr(rag, "call_llm", lambda *a: 1 / 0)
+    res = rag.answer_question("paracetamol", FakeEmbedder(), coll, rag.DEFAULT_MODEL, "k",
+                              threshold=0.6, bm25=bm25)
+    assert (res["refused"], res["reason"], res["answer"]) == (True, "below_threshold", rag.REFUSAL)
+    assert abs(res["best_similarity"] - 0.55) < 1e-9

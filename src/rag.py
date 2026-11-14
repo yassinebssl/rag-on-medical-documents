@@ -69,11 +69,16 @@ def check_free(model):
 
 
 def call_llm(prompt, model, api_key, retries=4):
-    """Send one chat request to OpenRouter. Retries empty replies, 429 and 5xx with growing pauses."""
+    """Send one chat request to OpenRouter. Retries empty replies, 429 and 5xx with growing pauses.
+
+    If every reply is empty, raise RuntimeError; it carries the last reply's `error`
+    field when the JSON body has one (a 200 reply can hold a provider error).
+    """
     check_free(model)
     body = json.dumps({"model": model, "messages": [{"role": "user", "content": prompt}],
                        "max_tokens": 600, "temperature": 0}).encode("utf-8")
     headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+    error = None
     for attempt in range(retries):
         req = urllib.request.Request(OPENROUTER_URL, data=body, headers=headers)
         try:
@@ -82,12 +87,13 @@ def call_llm(prompt, model, api_key, retries=4):
             text = (data.get("choices") or [{}])[0].get("message", {}).get("content") or ""
             if text.strip():
                 return text
+            error = data.get("error")
         except urllib.error.HTTPError as exc:
             if not (exc.code == 429 or exc.code >= 500) or attempt == retries - 1:
                 raise
         if attempt < retries - 1:
             time.sleep(10 * 2 ** attempt)  # free tier is rate-limited upstream
-    raise RuntimeError(f"empty response from {model}")
+    raise RuntimeError(f"empty response from {model}" + (f": {error}" if error else ""))
 
 
 def retrieve(question, embedder, collection, k=TOP_K):
@@ -109,8 +115,13 @@ def source_label(hit):
 
 
 def format_context(hits):
-    """Number the passages [1]..[k] for the prompt, each under its source label."""
-    return "\n\n".join(f"[{i}] {source_label(h)}\n{h['text']}" for i, h in enumerate(hits, 1))
+    """Number the passages [1]..[k] for the prompt, each under its source label.
+
+    A passage's own reference markers ([12], [3, 4]) become (12), (3, 4) in the prompt,
+    so that the model cannot copy them as citations. The hits are not changed.
+    """
+    return "\n\n".join(f"[{i}] {source_label(h)}\n{CITATION.sub(lambda m: f'({m.group(1)})', h['text'])}"
+                         for i, h in enumerate(hits, 1))
 
 
 def cited_numbers(answer):
