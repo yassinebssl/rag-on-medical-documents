@@ -7,7 +7,8 @@ import gradio as gr
 import rag
 from rag import load_context
 
-DISCLAIMER = "This tool is a student project. It is not medical advice. Check every answer with a clinician."
+DISCLAIMER = ("This tool is a student project. It is not medical advice. Check every answer with a clinician. "
+              "Questions are sent to OpenRouter: do not type anything that identifies a patient.")
 DENSE, HYBRID = "Dense", "Hybrid (dense + BM25)"
 NOT_IN_PASSAGES = "The retrieved passages do not contain the answer."
 REASONS = {"below_threshold": "Best similarity {best:.2f} is below the threshold.",

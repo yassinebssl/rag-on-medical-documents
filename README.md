@@ -12,12 +12,12 @@ Course: LLM Final Projects 2026-2027, Prof. A. Moussaoui, Project 2.
 
 ## Quick start
 
-The commands are for a clean Linux machine with Python 3 (the project was built with Python 3.12), run from the repository root.
+The commands are for a clean Linux machine with Python 3.12, run from the repository root.
 
-1. Create the virtual environment: `python3 -m venv .venv`
-2. Install the dependencies: `.venv/bin/pip install -r requirements.txt` (this installs the CPU build of PyTorch, so it needs network access).
-3. Copy `.env.example` to `.env` and put a free OpenRouter key after `OPENROUTER_API_KEY=`. `OPENROUTER_MODEL` is the default model for the command line and the evaluation. Every model must be a free one. Never commit `.env`.
-4. Get the corpus into `data/raw/who/` (PDF files) and `data/raw/pubmed/` (text files), as described in the Data section.
+1. Create the virtual environment: `python3 -m venv .venv`. On Debian and Ubuntu this needs the `python3-venv` package (`sudo apt install python3-venv`).
+2. Install the dependencies: `.venv/bin/pip install -r requirements.txt`. The install downloads the packages, including the CPU build of PyTorch.
+3. Create the settings file: `cp .env.example .env`. Then put a free OpenRouter key after `OPENROUTER_API_KEY=` in `.env`. `OPENROUTER_MODEL` is the default model for the command line and the evaluation. Every model must be a free one. Never commit `.env`.
+4. Download the corpus used for the results: `.venv/bin/python scripts/fetch_corpus.py --from-manifest`. It writes `data/raw/who/` (PDF files) and `data/raw/pubmed/` (text files). See the Data section.
 5. Build the index: `.venv/bin/python src/index.py`. The first run downloads the BGE-M3 model (about 2 GB), and the embedding takes about 3 hours on a laptop CPU. The build is resumable: after an interruption, run the same command again and it only embeds the chunks that are missing. `--rebuild` starts from zero. The index is stored in `chroma_db/`.
 6. Launch the app: `.venv/bin/python src/app.py`, then open http://127.0.0.1:7860.
 
@@ -29,7 +29,7 @@ Ask one question from the command line:
 .venv/bin/python src/rag.py "question" [model] [--hybrid]
 ```
 
-It prints the reason (`answered`, `below_threshold`, `uncited`, `model_refused` or `no_context`), the best similarity, the retrieved passages with their similarity, and the model's answer. Without `model` it uses `OPENROUTER_MODEL` from `.env`, then the first model of `FREE_MODELS` in `src/rag.py`. Without `--hybrid` it uses dense retrieval only.
+It prints the reason (`answered`, `below_threshold`, `uncited`, `model_refused` or `no_context`), the best similarity, the retrieved passages with their similarity, and the model's raw reply. The raw reply is printed also when the verdict is a refusal such as `uncited`. When the model is not called (`below_threshold` or `no_context`), it prints the refusal sentence. Without `model` it uses `OPENROUTER_MODEL` from `.env`, then the first model of `FREE_MODELS` in `src/rag.py`. Without `--hybrid` it uses dense retrieval only.
 
 Run the tests (they use fakes: no model, no database, no network):
 
@@ -49,7 +49,7 @@ Calibrate the similarity threshold:
 .venv/bin/python src/evaluate.py sweep
 ```
 
-For each threshold from 0.30 to 0.80 in steps of 0.05, it takes the best dense similarity of every question and prints the answer rate, the refusal rate and their mean (called `balanced`), then the best threshold. It writes `results/threshold_sweep.csv`. It does not change the threshold: the value used by the app, the command line and the evaluation is `SIM_THRESHOLD` in `src/rag.py` (0.6), which the app also lets you change with a slider.
+For each threshold from 0.30 to 0.80 in steps of 0.05, it takes the best dense similarity of every question and prints the answer rate, the refusal rate and their mean (called `balanced`), then the best threshold. It writes `results/threshold_sweep.csv`. It does not change the threshold: the value used by the app, the command line and the evaluation is `SIM_THRESHOLD` in `src/rag.py` (0.6), which the app also lets you change with a slider. To use the best value, copy it by hand into `SIM_THRESHOLD` in `src/rag.py`. Then move or delete `results/records.jsonl`, because `run` stops when that file holds records made at another threshold. Run `sweep` before the full `run`.
 
 Evaluate the systems:
 
@@ -59,27 +59,36 @@ Evaluate the systems:
 
 - `--systems`: comma-separated list taken from `rag_dense`, `rag_hybrid`, `bm25_rag`, `no_rag`. The default is all four.
 - `--models`: comma-separated model ids, or `all` for the five models of `FREE_MODELS`. The default is the single model `OPENROUTER_MODEL` from `.env`, or the first free model. A model that is not free stops the run.
-- `--judge`: also scores faithfulness, with one extra LLM call per answer.
+- `--judge`: also scores faithfulness, with one extra LLM call per answered question that has passages. The faithfulness of a record is only scored in the run that creates the record, so give `--judge` from the first run. A failed judge call leaves that record's faithfulness empty.
 - `--limit N`: keeps only the first N questions of the set. The set starts with the 20 answerable questions, so a small N contains no out-of-corpus question.
 
-The run is resumable: every answer is appended to `results/records.jsonl`, and a rerun skips what is already there. A call that fails is printed and not recorded, so a rerun retries it. After the run, these files are written in `results/`:
+The run is resumable: every answer is appended to `results/records.jsonl`, and a rerun skips what is already there. A call that fails is printed and not recorded, so a rerun retries it. Each record stores the threshold it was made with. After the run, these files are written in `results/`:
 
 - `records.jsonl`: one line per answer.
 - `summary.csv`: one row of metrics per system and model, computed from all the records in `records.jsonl`.
-- `human_rating_sheet.csv`: the answers with empty `safety_1_5` and `clarity_1_5` columns, to be filled by hand.
-- `threshold_sweep.csv`: written by the `sweep` command.
+- `human_rating_sheet.csv`: the answers with `safety_1_5` and `clarity_1_5` columns, to be filled by hand. A rerun keeps the ratings already typed for answers that did not change, and leaves the other rows empty.
+
+`results/threshold_sweep.csv` is written by the `sweep` command, not by `run`.
 
 ## Data
 
-The corpus has 50 documents: 20 WHO guidelines (PDF files from WHO IRIS) and 30 open-access articles from PubMed Central (full text from the Europe PMC API, stored as text files). The documents are not committed: `data/raw/` is ignored by git. `docs/dataset_links.md` lists the source URL of every document.
+The corpus has 50 documents: 20 WHO guidelines (PDF files from WHO IRIS) and 30 open-access articles from PubMed Central (full text from the Europe PMC API, stored as text files). The documents are not committed: `data/raw/` is ignored by git, except `data/raw/manifest.json`. The manifest is committed and records the documents actually used (source, file, title, URL and size of each document). `docs/dataset_links.md` lists the source URL of every document. It is generated from the manifest with `.venv/bin/python scripts/make_dataset_links.py`.
 
-`scripts/fetch_corpus.py` downloads a corpus of this kind:
+To download the same documents under the same file names:
+
+```
+.venv/bin/python scripts/fetch_corpus.py --from-manifest
+```
+
+It downloads each WHO PDF from its recorded URL and the text of each PubMed article from Europe PMC. It prints one line per file and one line per failure, and it does not change the manifest. A PubMed article's text can differ from the evaluated one if Europe PMC has updated the article. `scripts/check_eval_set.py` checks that the evidence quotes of the question set are still in the corpus.
+
+To build a different corpus, search WHO IRIS and Europe PMC by topic:
 
 ```
 .venv/bin/python scripts/fetch_corpus.py --who 20 --pubmed 30
 ```
 
-It searches WHO IRIS and Europe PMC by topic, so a new download may not give exactly the same documents as the ones used for the results. `data/raw/manifest.json` records what was actually used (source, file, title, URL and size of each document). `docs/dataset_links.md` is generated from it with `.venv/bin/python scripts/make_dataset_links.py`.
+This search may not give the same documents as the ones used for the results, and it rewrites `data/raw/manifest.json`.
 
 ## How it works
 
@@ -122,7 +131,8 @@ Metrics, per system and model (columns of `summary.csv`):
 - `refusal_rate`: share of out-of-corpus questions that were refused.
 - `hit_rate`: share of answerable questions for which at least one retrieved passage comes from the expected source. Empty for `no_rag`.
 - `context_precision`: for each answerable question, the mean of precision@k over the ranks k that hold a relevant passage (0 if none), averaged over the questions. A passage is relevant when its source is the question's source. Empty for `no_rag`.
-- `faithfulness`: with `--judge`, for each answered question that has passages, one judge call (always the first model of `FREE_MODELS`) counts the claims of the answer and how many the passages fully support. The score is supported claims divided by all claims, averaged over the answers where the judge replied in a readable form. Empty without `--judge`.
+- `faithfulness`: with `--judge`, for each answered question that has passages, one judge call (always the first model of `FREE_MODELS`) counts the claims of the answer and how many the passages fully support. The score is supported claims divided by all claims, averaged over the answers where the judge replied in a readable form with a supported count between 0 and the total. Empty without `--judge`.
+- `n_judged`: number of records that have a faithfulness score.
 - `mean_latency_s`: mean time per answer in seconds.
 
 Context precision and faithfulness follow the RAGAS definitions, but they are computed by `src/evaluate.py`, not by the `ragas` package. Context precision uses the relevance labels of the question set instead of an LLM judge.
@@ -138,7 +148,7 @@ Results are written to results/summary.csv by the evaluation run.
 - The corpus is small (50 documents), so many real questions are outside it and are refused.
 - The free models are rate-limited and slow, and a call can fail or return an empty reply. The code retries and pauses, and the app shows the error instead of crashing.
 - The similarity threshold is a single number. A value that is too high refuses answerable questions, and one that is too low lets weakly related passages through.
-- No patient data is stored or processed. The questions are sent to OpenRouter with the retrieved passages.
+- The corpus contains no patient data. Questions are sent to OpenRouter with the retrieved passages, so do not type anything that identifies a patient. The evaluation stores its questions and answers in `results/records.jsonl`.
 
 ## Tools and sources
 
