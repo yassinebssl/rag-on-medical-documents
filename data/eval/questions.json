@@ -1,0 +1,272 @@
+[
+  {
+    "id": "A01",
+    "question": "At what blood pressure should drug treatment be started in an adult with confirmed hypertension?",
+    "answerable": true,
+    "ground_truth": "Drug treatment should be started when systolic blood pressure is 140 mmHg or higher or diastolic blood pressure is 90 mmHg or higher, in people with a confirmed diagnosis of hypertension.",
+    "source": "WHO_02_Guideline_for_the_pharmacological_treatment_of_hypertension_in_adults.pdf",
+    "page": 19,
+    "evidence": "WHO recommends initiation of pharmacological antihypertensive treatment of individuals with a confirmed diagnosis of hypertension and systolic blood pressure of ≥140 mmHg or diastolic blood pressure of ≥90 mmHg."
+  },
+  {
+    "id": "A02",
+    "question": "What blood pressure values define stage 2 hypertension?",
+    "answerable": true,
+    "ground_truth": "Stage 2 hypertension is a systolic blood pressure of 160 mmHg or more or a diastolic blood pressure of 100 mmHg or more.",
+    "source": "WHO_01_Clinical_guidelines_for_the_management_of_hypertension.pdf",
+    "page": 13,
+    "evidence": "Stage 2 includes patients with systolic blood pressure ≥160 mmHg or diastolic blood pressure ≥100 mmHg."
+  },
+  {
+    "id": "A03",
+    "question": "What is the maximum daily sodium intake recommended for adults?",
+    "answerable": true,
+    "ground_truth": "Adults should reduce their sodium intake to less than 2 g per day, which corresponds to 5 g of salt per day.",
+    "source": "WHO_04_Guideline_sodium_intake_for_adults_and_children.pdf",
+    "page": 10,
+    "evidence": "WHO recommends a reduction to <2 g/day sodium (5 g/day salt) in adults (strong recommendation)."
+  },
+  {
+    "id": "A04",
+    "question": "What is the starting dose of metformin?",
+    "answerable": true,
+    "ground_truth": "Metformin is started at 500–850 mg once daily with or after food, and can be increased to 500 mg three times daily (tds) or 850 mg twice daily (bd).",
+    "source": "WHO_06_Management_of_diabetes_mellitus_standards_of_care_and_clinical_practic.pdf",
+    "page": 14,
+    "evidence": "The starting dose is 500-850 mg with or after food, once daily, which can be increased to 500 mg tds or 850 mg bd."
+  },
+  {
+    "id": "A05",
+    "question": "What LDL cholesterol goal applies to patients with diabetes?",
+    "answerable": true,
+    "ground_truth": "For patients with diabetes, which counts as a coronary heart disease equivalent, the LDL cholesterol goal is below 100 mg/dL.",
+    "source": "WHO_08_Guidelines_for_the_management_of_dyslipidaemia_in_patients_with_diabet.pdf",
+    "page": 4,
+    "evidence": "the goal LDL for patients with coronary heart disease or coronary heart disease equivalent (including diabetes) is an LDL cholesterol <100 mg/dL."
+  },
+  {
+    "id": "A06",
+    "question": "How long should parenteral artesunate be given to a patient with severe malaria?",
+    "answerable": true,
+    "ground_truth": "Severe malaria is treated with intravenous or intramuscular artesunate for at least 24 hours and until the patient can tolerate oral medication.",
+    "source": "WHO_09_Guidelines_for_the_treatment_of_malaria.pdf",
+    "page": 14,
+    "evidence": "Treat adults and children with severe malaria (including infants, pregnant women in all trimesters and lactating women) with intravenous or intramuscular artesunate for at least 24 h and until they can tolerate oral medication."
+  },
+  {
+    "id": "A07",
+    "question": "What single dose of primaquine is added to ACT for patients with P. falciparum malaria in low-transmission areas?",
+    "answerable": true,
+    "ground_truth": "In low-transmission areas, a single dose of 0.25 mg/kg body weight of primaquine is given with ACT to patients with P. falciparum malaria to reduce transmission.",
+    "source": "WHO_09_Guidelines_for_the_treatment_of_malaria.pdf",
+    "page": 12,
+    "evidence": "In low-transmission areas, give a single dose of 0.25 mg/kg bw primaquine with ACT to patients with P. falciparum malaria (except pregnant women, infants aged < 6 months and women breastfeeding infants aged < 6 months) to reduce transmission."
+  },
+  {
+    "id": "A08",
+    "question": "Which treatment regimen should new patients with pulmonary tuberculosis receive?",
+    "answerable": true,
+    "ground_truth": "New patients with pulmonary tuberculosis should receive a regimen containing 6 months of rifampicin: 2HRZE/4HR.",
+    "source": "WHO_13_Treatment_of_tuberculosis_guidelines.pdf",
+    "page": 14,
+    "evidence": "New patients with pulmonary TB should receive a regimen containing 6 months of rifampicin: 2HRZE/4HR"
+  },
+  {
+    "id": "A09",
+    "question": "When should antiretroviral therapy be started in a person living with HIV who begins tuberculosis treatment?",
+    "answerable": true,
+    "ground_truth": "Antiretroviral therapy should be started as soon as possible, within two weeks of starting tuberculosis treatment, whatever the CD4 cell count.",
+    "source": "WHO_15_WHO_consolidated_guidelines_on_tuberculosis_module_6_tuberculosis_and_.pdf",
+    "page": 22,
+    "evidence": "ART should be started as soon as possible within two weeks of initiating TB treatment, regardless of CD4 cell count, among people living with HIV"
+  },
+  {
+    "id": "A10",
+    "question": "How long should a prescription for HIV post-exposure prophylaxis last?",
+    "answerable": true,
+    "ground_truth": "A 28-day prescription of antiretroviral drugs should be provided for HIV post-exposure prophylaxis.",
+    "source": "WHO_20_Guidelines_for_HIV_post_exposure_prophylaxis.pdf",
+    "page": 8,
+    "evidence": "A 28-day prescription of antiretroviral drugs should be provided for HIV post-exposure prophylaxis following initial risk assessment"
+  },
+  {
+    "id": "A11",
+    "question": "How often should people established on antiretroviral therapy be offered clinical visits?",
+    "answerable": true,
+    "ground_truth": "People established on antiretroviral therapy should be offered clinical visits every 3 to 6 months, preferably every six months if feasible.",
+    "source": "WHO_19_Consolidated_HIV_guidelines_service_delivery.pdf",
+    "page": 11,
+    "evidence": "People established on ART should be offered clinical visits every 3–6 months, preferably every six months if feasible"
+  },
+  {
+    "id": "A12",
+    "question": "What is the minimum number of antenatal care contacts recommended during pregnancy?",
+    "answerable": true,
+    "ground_truth": "Antenatal care models with a minimum of eight contacts are recommended, to reduce perinatal mortality and improve women's experience of care.",
+    "source": "WHO_22_WHO_recommendations_on_antenatal_care_for_a_positive_pregnancy_experie.pdf",
+    "page": 119,
+    "evidence": "Antenatal care models with a minimum of eight contacts are recommended to reduce perinatal mortality and improve women’s experience of care."
+  },
+  {
+    "id": "A13",
+    "question": "What is the usual therapeutic dose of paracetamol for adults?",
+    "answerable": true,
+    "ground_truth": "Therapeutic dosing is generally 1 g every 4 hours for immediate-release paracetamol, or 1.33 g every 6 hours for modified-release paracetamol, up to a maximum of 4 g per day.",
+    "source": "Paracetamol Dosing Errors in People Aged 12 Years and Over: An Analysis of Over 14,000 Cases Reported to an Australian Poisons Information Centre.",
+    "page": null,
+    "evidence": "Therapeutic dosing is generally considered as 1 g every 4 h for immediate-release formulations or 1.33 g every 6 h for modified-release formulations up to a maximum of 4 g per day."
+  },
+  {
+    "id": "A14",
+    "question": "What maximum daily paracetamol dose is recommended for older people weighing less than 50 kg?",
+    "answerable": true,
+    "ground_truth": "A maximum paracetamol dose of 60 mg/kg per day is recommended for older people weighing less than 50 kg.",
+    "source": "Paracetamol dosing in hospital and on discharge for older people who are frail or have low body weight.",
+    "page": null,
+    "evidence": "The New South Wales Therapeutic Advisory Group paracetamol guideline recommends a maximum dose of 60 mg/kg/d for older people weighing <50 kg."
+  },
+  {
+    "id": "A15",
+    "question": "What paracetamol regimen did participants receive in the PATH-BP trial?",
+    "answerable": true,
+    "ground_truth": "Participants were randomized to 1 g of paracetamol four times daily, or matched placebo, for 2 weeks.",
+    "source": "Cytokeratin-18 is a sensitive biomarker of alanine transaminase increase in a placebo-controlled, randomized, crossover trial of therapeutic paracetamol dosing (PATH-BP biomarker substudy).",
+    "page": null,
+    "evidence": "Individuals (n = 110) were randomized to receive 1 g paracetamol 4× daily or matched placebo for 2 weeks"
+  },
+  {
+    "id": "A16",
+    "question": "How often is zilebesiran dosed for hypertension?",
+    "answerable": true,
+    "ground_truth": "Zilebesiran is dosed twice yearly, which may enhance adherence and sustain blood pressure control.",
+    "source": "Zilebesiran: an RNA interference agent-its need and potential to transform hypertension treatment.",
+    "page": null,
+    "evidence": "Zilebesiran may redefine therapy in hypertension management through twice-yearly dosing that enhances adherence, ensures sustained BP control, and may reduce cardiovascular risk."
+  },
+  {
+    "id": "A17",
+    "question": "Which fixed-dose combination was used as first-line treatment in the Hypertension Treatment in Nigeria program?",
+    "answerable": true,
+    "ground_truth": "Fixed-dose combinations such as lisinopril-hydrochlorothiazide were used as first-line treatment.",
+    "source": "Impact evaluation of the Hypertension Treatment in Nigeria program using the Translational Science Benefits Model.",
+    "page": null,
+    "evidence": "Use of fixed-dose combinations, such as lisinopril-hydrochlorothiazide as first-line treatment"
+  },
+  {
+    "id": "A18",
+    "question": "What place do SGLT2 inhibitors have in first-line treatment of type 2 diabetes under the latest NICE guidelines?",
+    "answerable": true,
+    "ground_truth": "Under the latest NICE guidelines, SGLT2 inhibitors are the preferred first-line therapy for type 2 diabetes, in combination with modified-release metformin.",
+    "source": "Implementing SGLT2 Inhibitor Therapy in Line with the New NICE Guidelines for Type 2 Diabetes Management.",
+    "page": null,
+    "evidence": "guidelines from the UK National Institute for Health and Care Excellence (NICE; NG28) have raised the profile of sodium–glucose cotransporter-2 inhibitors (SGLT2is) so that they are now the preferred first-line therapy in combination with modified-release metformin"
+  },
+  {
+    "id": "A19",
+    "question": "What starting dose of basal insulin is recommended when adding it for a patient with type 2 diabetes already on a GLP-1 receptor agonist?",
+    "answerable": true,
+    "ground_truth": "Basal insulin is started at 10 units/day or 0.1–0.2 units/kg/day, with careful titration to avoid hypoglycaemia.",
+    "source": "Optimizing Type 2 Diabetes Management in Iraq: Expert Consensus on Initiation and Intensification of Insulin-Based Treatment Options.",
+    "page": null,
+    "evidence": "For patients already on GLP-1 RA therapy who require further glucose-lowering interventions, the addition of BI is preferred, starting at 10 units/day or 0.1–0.2 units/kg/day, with careful titration to avoid hypoglycemia."
+  },
+  {
+    "id": "A20",
+    "question": "Which adverse effects come with pioglitazone treatment in type 2 diabetes?",
+    "answerable": true,
+    "ground_truth": "Pioglitazone increases the risk of peripheral oedema, weight gain, fractures and hospitalization for heart failure.",
+    "source": "Is there still room for pioglitazone in contemporary type 2 diabetes management?",
+    "page": null,
+    "evidence": "risk of hospitalization for heart failure (HHF) [6]. However, the benefits of pioglitazone in terms of insulin sensitivity, glycaemic control, and potential protection against atherosclerotic CV events come at the cost of an increased risk of peripheral oedema, weight gain, fractures, and HHF"
+  },
+  {
+    "id": "O01",
+    "question": "What is the first-line topical treatment for scabies?",
+    "answerable": false,
+    "ground_truth": null,
+    "source": null,
+    "page": null,
+    "evidence": null
+  },
+  {
+    "id": "O02",
+    "question": "Which antibody test is used first to screen for coeliac disease?",
+    "answerable": false,
+    "ground_truth": null,
+    "source": null,
+    "page": null,
+    "evidence": null
+  },
+  {
+    "id": "O03",
+    "question": "What is the usual starting dose of levodopa in Parkinson's disease?",
+    "answerable": false,
+    "ground_truth": null,
+    "source": null,
+    "page": null,
+    "evidence": null
+  },
+  {
+    "id": "O04",
+    "question": "Which disease-modifying drugs are used to treat relapsing multiple sclerosis?",
+    "answerable": false,
+    "ground_truth": null,
+    "source": null,
+    "page": null,
+    "evidence": null
+  },
+  {
+    "id": "O05",
+    "question": "What is the starting dose of methylphenidate for a child with ADHD?",
+    "answerable": false,
+    "ground_truth": null,
+    "source": null,
+    "page": null,
+    "evidence": null
+  },
+  {
+    "id": "O06",
+    "question": "How long is a typical course of isotretinoin for severe acne?",
+    "answerable": false,
+    "ground_truth": null,
+    "source": null,
+    "page": null,
+    "evidence": null
+  },
+  {
+    "id": "O07",
+    "question": "What is the first-line induction therapy for mild ulcerative colitis?",
+    "answerable": false,
+    "ground_truth": null,
+    "source": null,
+    "page": null,
+    "evidence": null
+  },
+  {
+    "id": "O08",
+    "question": "Which planet is the largest in the solar system?",
+    "answerable": false,
+    "ground_truth": null,
+    "source": null,
+    "page": null,
+    "evidence": null
+  },
+  {
+    "id": "O09",
+    "question": "Who painted the Mona Lisa?",
+    "answerable": false,
+    "ground_truth": null,
+    "source": null,
+    "page": null,
+    "evidence": null
+  },
+  {
+    "id": "O10",
+    "question": "Who wrote the play Romeo and Juliet?",
+    "answerable": false,
+    "ground_truth": null,
+    "source": null,
+    "page": null,
+    "evidence": null
+  }
+]
