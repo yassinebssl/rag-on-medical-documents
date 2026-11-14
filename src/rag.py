@@ -172,18 +172,33 @@ def answer_question(question, embedder, collection, model, api_key, threshold=SI
     return {**res, "best_similarity": best}
 
 
+def load_context():
+    """Return the embedder, collection, BM25 index and API key; exit with one line if one is missing."""
+    import index  # imported here so that importing rag stays light
+    from bm25 import BM25
+
+    api_key = load_env().get("OPENROUTER_API_KEY")
+    if not api_key:
+        raise SystemExit("OPENROUTER_API_KEY is missing: copy .env.example to .env and add your key.")
+    empty = "The index is empty: run .venv/bin/python src/index.py first."
+    try:
+        collection = index.open_index()
+    except Exception:  # Chroma raises when the collection does not exist
+        raise SystemExit(empty)
+    if collection.count() == 0:
+        raise SystemExit(empty)
+    return {"embedder": index.load_embedder(), "collection": collection,
+            "bm25": BM25(index.all_chunks(collection)), "api_key": api_key}
+
+
 if __name__ == "__main__":  # .venv/bin/python src/rag.py "question" [model] [--hybrid]
     import sys
 
-    from bm25 import BM25
-    from index import all_chunks, load_embedder, open_index
-
     args = [a for a in sys.argv[1:] if a != "--hybrid"]
-    env = load_env()
-    model = args[1] if len(args) > 1 else env.get("OPENROUTER_MODEL") or DEFAULT_MODEL
-    collection = open_index()
-    bm25 = BM25(all_chunks(collection)) if "--hybrid" in sys.argv else None
-    res = answer_question(args[0], load_embedder(), collection, model, env["OPENROUTER_API_KEY"],
+    ctx = load_context()
+    model = args[1] if len(args) > 1 else load_env().get("OPENROUTER_MODEL") or DEFAULT_MODEL
+    bm25 = ctx["bm25"] if "--hybrid" in sys.argv else None
+    res = answer_question(args[0], ctx["embedder"], ctx["collection"], model, ctx["api_key"],
                           bm25=bm25)
     print(f"reason={res['reason']} best_similarity={res['best_similarity']:.3f}")
     for h in res["hits"]:

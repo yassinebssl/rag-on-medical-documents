@@ -5,3 +5,4 @@ chromadb==1.5.9
 pypdf==7.1.0
 cryptography==50.0.2
 pytest==9.2.0
+gradio==6.32.0
