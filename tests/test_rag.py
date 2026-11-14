@@ -144,3 +144,39 @@ def test_call_llm_raises_runtime_error_when_always_empty(monkeypatch):
         rag.call_llm("p", rag.DEFAULT_MODEL, "k", retries=2)
     assert rag.DEFAULT_MODEL in str(excinfo.value)
     assert len(calls) == 2
+
+
+def test_all_chunks_reads_every_chunk_from_the_collection():
+    from index import all_chunks
+    assert all_chunks(FakeCollection(rows(0.25))) == [
+        {"id": "a", "text": "Artemether text", "source": "WHO_09.pdf", "page": 42},
+        {"id": "b", "text": "Paracetamol text", "source": "Title.", "page": None}]
+
+
+def test_rrf_fuses_by_reciprocal_rank_and_keeps_the_first_dict():
+    def h(i, sim):
+        """Return a minimal hit with an id and a similarity."""
+        return {"id": i, "similarity": sim}
+    dense = [h("A", 0.9), h("B", 0.8), h("C", 0.7)]
+    sparse = [h("C", None), h("A", None), h("D", None)]
+    fused = rag.rrf([dense, sparse])
+    assert [x["id"] for x in fused] == ["A", "C", "B", "D"]
+    assert fused[1]["similarity"] == 0.7      # the dense dict wins for C
+
+
+def test_hybrid_answer_question_gates_on_dense_similarity_and_fuses(monkeypatch):
+    from bm25 import BM25
+    from index import all_chunks
+    coll = FakeCollection(rows(0.25))
+    seen = {}
+
+    def fake_llm(prompt, model, api_key):
+        """Record the prompt and answer citing passage 1."""
+        seen["prompt"] = prompt
+        return "Paracetamol [1]."
+    monkeypatch.setattr(rag, "call_llm", fake_llm)
+    res = rag.answer_question("paracetamol", FakeEmbedder(), coll, rag.DEFAULT_MODEL, "k",
+                              threshold=0.6, bm25=BM25(all_chunks(coll)))
+    assert res["reason"] == "answered" and abs(res["best_similarity"] - 0.75) < 1e-9
+    assert [h["id"] for h in res["hits"]] == ["b", "a"]   # b: ranks 2 and 1; a: rank 1 only
+    assert len(res["hits"]) <= rag.TOP_K

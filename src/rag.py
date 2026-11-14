@@ -5,6 +5,10 @@ below the threshold -> ask a free LLM on OpenRouter with the passages numbered
 [1]..[k] -> keep the answer only if it cites passages and every cited number is
 one of the given passages -> replace the numbers with source labels.
 
+Hybrid mode (bm25 given): the top-20 dense chunks and the top-20 BM25 chunks
+are fused by reciprocal rank fusion and the first 5 are the passages; the
+refusal gate still uses the best dense similarity.
+
 Only free OpenRouter models are allowed (model id ends in ':free', or is the
 'openrouter/free' router). This is a project rule, enforced here.
 """
@@ -18,6 +22,7 @@ import urllib.request
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 REFUSAL = "I cannot answer this question from the provided documents."
 TOP_K = 5
+CANDIDATES = 20  # chunks taken from each ranking before fusion in hybrid mode
 SIM_THRESHOLD = 0.6  # the brief's value; calibrate on the eval set before reporting
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 FREE_MODELS = [
@@ -134,10 +139,32 @@ def generate_answer(question, hits, model, api_key):
             "hits": hits, "cited": cited, "raw": raw}
 
 
-def answer_question(question, embedder, collection, model, api_key, threshold=SIM_THRESHOLD):
-    """Answer one question: retrieve, refuse below the threshold, else generate_answer."""
-    hits = retrieve(question, embedder, collection)
-    best = hits[0]["similarity"] if hits else 0.0
+def rrf(rankings, k=60):
+    """Fuse ranked hit lists by reciprocal rank: an id scores the sum of 1 / (k + rank).
+
+    Ties keep the order of first appearance; the dict kept for an id is the one
+    from the earliest ranking that has it.
+    """
+    # Cormack, Clarke and Buettcher, "Reciprocal Rank Fusion outperforms Condorcet and
+    # individual rank learning methods", SIGIR 2009: https://doi.org/10.1145/1571941.1572114
+    scores, first = {}, {}
+    for ranking in rankings:
+        for rank, hit in enumerate(ranking, 1):
+            scores[hit["id"]] = scores.get(hit["id"], 0.0) + 1 / (k + rank)
+            first.setdefault(hit["id"], hit)
+    return [first[i] for i in sorted(scores, key=lambda i: -scores[i])]
+
+
+def answer_question(question, embedder, collection, model, api_key, threshold=SIM_THRESHOLD,
+                    bm25=None):
+    """Retrieve (fused with BM25 if given), refuse below the threshold, else generate_answer."""
+    if bm25 is None:
+        hits = retrieve(question, embedder, collection)
+        best = hits[0]["similarity"] if hits else 0.0
+    else:
+        dense = retrieve(question, embedder, collection, k=CANDIDATES)
+        best = dense[0]["similarity"] if dense else 0.0
+        hits = rrf([dense, bm25.search(question, CANDIDATES)])[:TOP_K]
     if best < threshold:
         res = {"answer": REFUSAL, "refused": True, "reason": "below_threshold", "hits": hits, "cited": []}
     else:
@@ -145,15 +172,21 @@ def answer_question(question, embedder, collection, model, api_key, threshold=SI
     return {**res, "best_similarity": best}
 
 
-if __name__ == "__main__":  # .venv/bin/python src/rag.py "question" [model]
+if __name__ == "__main__":  # .venv/bin/python src/rag.py "question" [model] [--hybrid]
     import sys
 
-    from index import load_embedder, open_index
+    from bm25 import BM25
+    from index import all_chunks, load_embedder, open_index
 
+    args = [a for a in sys.argv[1:] if a != "--hybrid"]
     env = load_env()
-    model = sys.argv[2] if len(sys.argv) > 2 else env.get("OPENROUTER_MODEL") or DEFAULT_MODEL
-    res = answer_question(sys.argv[1], load_embedder(), open_index(), model, env["OPENROUTER_API_KEY"])
+    model = args[1] if len(args) > 1 else env.get("OPENROUTER_MODEL") or DEFAULT_MODEL
+    collection = open_index()
+    bm25 = BM25(all_chunks(collection)) if "--hybrid" in sys.argv else None
+    res = answer_question(args[0], load_embedder(), collection, model, env["OPENROUTER_API_KEY"],
+                          bm25=bm25)
     print(f"reason={res['reason']} best_similarity={res['best_similarity']:.3f}")
     for h in res["hits"]:
-        print(f"  {h['similarity']:.3f}  {h['source'][:80]}  p.{h['page']}")
+        sim = "-" if h["similarity"] is None else f"{h['similarity']:.3f}"
+        print(f"  {sim:>5}  {source_label(h)}")
     print(res.get("raw", res["answer"]))

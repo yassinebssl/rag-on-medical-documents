@@ -64,6 +64,14 @@ def open_index():
     return client.get_collection(COLLECTION)
 
 
+def all_chunks(collection):
+    """Return every stored chunk as a dict with id, text, source and page (None for no page)."""
+    res = collection.get(include=["documents", "metadatas"])
+    return [{"id": cid, "text": doc, "source": meta["source"],
+             "page": meta["page"] if meta["page"] != -1 else None}
+            for cid, doc, meta in zip(res["ids"], res["documents"], res["metadatas"])]
+
+
 if __name__ == "__main__":  # .venv/bin/python src/index.py [--rebuild]
     from ingest import build_chunks
 
