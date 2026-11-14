@@ -68,15 +68,17 @@ def check_free(model):
         raise ValueError(f"{model!r} is not a free model; the project uses free models only")
 
 
-def call_llm(prompt, model, api_key, retries=4):
+def call_llm(prompt, model, api_key, retries=4, max_tokens=600):
     """Send one chat request to OpenRouter. Retries empty replies, 429 and 5xx with growing pauses.
 
     If every reply is empty, raise RuntimeError; it carries the last reply's `error`
     field when the JSON body has one (a 200 reply can hold a provider error).
+    An empty reply cut at max_tokens raises at once: a reasoning model spent the whole
+    budget on hidden reasoning, and a retry at temperature 0 would do the same.
     """
     check_free(model)
     body = json.dumps({"model": model, "messages": [{"role": "user", "content": prompt}],
-                       "max_tokens": 600, "temperature": 0}).encode("utf-8")
+                       "max_tokens": max_tokens, "temperature": 0}).encode("utf-8")
     headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
     error = None
     for attempt in range(retries):
@@ -84,9 +86,12 @@ def call_llm(prompt, model, api_key, retries=4):
         try:
             with urllib.request.urlopen(req, timeout=180) as resp:
                 data = json.load(resp)
-            text = (data.get("choices") or [{}])[0].get("message", {}).get("content") or ""
+            choice = (data.get("choices") or [{}])[0]
+            text = choice.get("message", {}).get("content") or ""
             if text.strip():
                 return text
+            if choice.get("finish_reason") == "length":
+                raise RuntimeError(f"{model} used all max_tokens={max_tokens} before writing an answer")
             error = data.get("error")
         except urllib.error.HTTPError as exc:
             if not (exc.code == 429 or exc.code >= 500) or attempt == retries - 1:

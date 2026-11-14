@@ -19,18 +19,28 @@ def test_sweep_and_best_threshold_prefers_the_higher_threshold_on_a_tie():
     assert ev.best_threshold(rows) == 0.6
 
 def test_judge_faithfulness_parses_the_json_in_the_reply(monkeypatch):
-    monkeypatch.setattr(rag, "call_llm", lambda p, m, k: 'Result: {"supported": 3, "total": 4}')
+    monkeypatch.setattr(rag, "call_llm", lambda p, m, k, **kw: 'Result: {"supported": 3, "total": 4}')
     assert ev.judge_faithfulness("answer", [{"text": "t", "source": "s", "page": 1}], "m:free", "k") == 0.75
 
 def test_judge_faithfulness_returns_none_on_garbage_or_zero_total(monkeypatch):
     for reply in ["no json here", '{"supported": 0, "total": 0}', '{"supported": "x"}']:
-        monkeypatch.setattr(rag, "call_llm", lambda p, m, k, reply=reply: reply)
+        monkeypatch.setattr(rag, "call_llm", lambda p, m, k, reply=reply, **kw: reply)
         assert ev.judge_faithfulness("a", [], "m:free", "k") is None
 
 def test_judge_faithfulness_returns_none_when_a_count_is_out_of_range(monkeypatch):
     for reply in ['{"supported": 5, "total": 4}', '{"supported": -1, "total": 4}', '{"supported": 0, "total": -2}']:
-        monkeypatch.setattr(rag, "call_llm", lambda p, m, k, reply=reply: reply)
+        monkeypatch.setattr(rag, "call_llm", lambda p, m, k, reply=reply, **kw: reply)
         assert ev.judge_faithfulness("a", [], "m:free", "k") is None
+
+def test_judge_faithfulness_gives_the_judge_a_larger_token_budget(monkeypatch):
+    seen = []
+    monkeypatch.setattr(rag, "call_llm", lambda p, m, k, **kw: seen.append(kw) or '{"supported": 1, "total": 1}')
+    assert ev.judge_faithfulness("a", [], "m:free", "k") == 1.0
+    assert seen == [{"max_tokens": 4000}]
+
+def test_no_rag_prompt_says_no_documents_are_given_and_keeps_the_refusal_sentence():
+    assert "No documents are given" in ev.NO_RAG_PROMPT and "own medical knowledge" in ev.NO_RAG_PROMPT
+    assert rag.REFUSAL in ev.NO_RAG_PROMPT
 
 def rec(system, qid, answerable, refused, relevant, faith=None, latency=1.0):
     """Build a minimal record with the keys summarize reads."""

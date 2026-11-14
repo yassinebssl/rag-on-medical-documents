@@ -246,7 +246,7 @@ def check_free(model):
         raise ValueError(f"{model!r} is not a free model; the project uses free models only")
 ```
 
-`call_llm` in `src/rag.py` sends one chat request with the standard library (`"max_tokens": 600, "temperature": 0`); its first statement is `check_free(model)`, so no paid id reaches the network. Free models are rate-limited, so it makes up to four attempts, retrying HTTP 429, any 5xx and empty replies after pauses of 10, 20 and 40 seconds (`time.sleep(10 * 2 ** attempt)`). Any other HTTP error, such as 401 for a bad key, is raised at once, and if every reply is empty it raises `RuntimeError`.
+`call_llm` in `src/rag.py` sends one chat request with the standard library (`"max_tokens": 600` by default, `"temperature": 0`); its first statement is `check_free(model)`, so no paid id reaches the network. Free models are rate-limited, so it makes up to four attempts, retrying HTTP 429, any 5xx and empty replies after pauses of 10, 20 and 40 seconds (`time.sleep(10 * 2 ** attempt)`). Any other HTTP error, such as 401 for a bad key, is raised at once, and if every reply is empty it raises `RuntimeError`. One empty reply is not retried: one cut off with `finish_reason` `length`. The default model reasons before it writes, and the `max_tokens` budget counts that hidden reasoning, so a long task can use the whole budget and leave no answer; at temperature 0 a retry would fail the same way, so `call_llm` raises at once.
 
 ```bash
 .venv/bin/python -m pytest -q tests/test_rag.py -k "call_llm or check_free or (below_threshold and not hybrid)"
@@ -513,7 +513,7 @@ A few good-looking answers say nothing about the questions you did not ask, so `
 
 **The question set**, `data/eval/questions.json`, holds 20 answerable questions (A01 to A20, each with a ground-truth answer, source, page and evidence quote) and 10 out-of-corpus ones that must be refused (O01 to O10: seven medical, three general knowledge).
 
-**Four systems** run with each chosen model: `rag_dense` (Steps 4 to 7), `rag_hybrid` (with Step 10), and the two baselines the course requires, `bm25_rag` (the 5 best BM25 passages, same prompt and citation check, no gate) and `no_rag` (the model alone, counted as a refusal only if it says the refusal sentence).
+**Four systems** run with each chosen model: `rag_dense` (Steps 4 to 7), `rag_hybrid` (with Step 10), and the two baselines the course requires, `bm25_rag` (the 5 best BM25 passages, same prompt and citation check, no gate) and `no_rag` (the model alone, counted as a refusal only if it says the refusal sentence). The `no_rag` prompt states that no documents are given and asks for an answer from the model's own knowledge: the refusal sentence names "the provided documents", and without that statement the model refused every question because it saw none.
 
 **Metrics**, one row per system and model in `results/summary.csv`. `answer_rate` is the share of answerable questions not refused, and `refusal_rate` the share of out-of-corpus questions refused; you need both, because a system that refuses everything scores 1.0 on the second and 0 on the first. `hit_rate` is the share of answerable questions with a passage from the expected source. `n`, `n_judged` and `mean_latency_s` count the records, the judged records and the mean seconds per answer.
 
@@ -532,7 +532,7 @@ def average_precision(relevant):
 
 For the toy list `[True, False, False, True, False]`, rank 1 is relevant with precision 1/1 and rank 4 with precision 2/4, so the score is (1 + 0.5) / 2 = 0.75. The same two relevant passages at ranks 1 and 2 give 1.0, and a list with none gives 0.0.
 
-**Faithfulness** is the share of an answer's claims that its passages fully support, also from RAGAS: what the citation check cannot measure. With `--judge`, each answered record with passages gets one call to a judge model, always `rag.DEFAULT_MODEL`, which must reply `{"supported": <int>, "total": <int>}`. A judge is a model too, so `judge_faithfulness` in `src/evaluate.py` returns `None` when the reply has no readable JSON or impossible counts. A judge call that raises is caught by `run_questions`, which prints `judge error` and still writes the answer, with faithfulness empty.
+**Faithfulness** is the share of an answer's claims that its passages fully support, also from RAGAS: what the citation check cannot measure. With `--judge`, each answered record with passages gets one call to a judge model, always `rag.DEFAULT_MODEL`, which must reply `{"supported": <int>, "total": <int>}`. Splitting an answer into claims takes the judge about 1,000 tokens of reasoning, so it gets `JUDGE_MAX_TOKENS = 4000` instead of 600. A judge is a model too, so `judge_faithfulness` in `src/evaluate.py` returns `None` when the reply has no readable JSON or impossible counts. A judge call that raises is caught by `run_questions`, which prints `judge error` and still writes the answer, with faithfulness empty.
 
 **The threshold sweep.** `sweep_thresholds` in `src/evaluate.py` takes each question's best dense similarity and, for each of the 11 thresholds from 0.30 to 0.80 in steps of 0.05, computes the answer rate, the refusal rate and their mean, `balanced`. `best_threshold` returns the highest threshold among those with the best `balanced`. Try it on eight made-up points:
 

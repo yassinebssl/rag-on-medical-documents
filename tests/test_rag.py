@@ -165,6 +165,22 @@ def test_call_llm_reports_the_error_field_of_a_200_reply(monkeypatch):
     assert len(calls) == 2
 
 
+def test_call_llm_sends_the_token_budget(monkeypatch):
+    calls = fake_urlopen(monkeypatch, ["ok", "ok"])
+    rag.call_llm("p", rag.DEFAULT_MODEL, "k")
+    rag.call_llm("p", rag.DEFAULT_MODEL, "k", max_tokens=4000)
+    assert [json.loads(c.data)["max_tokens"] for c in calls] == [600, 4000]
+
+
+def test_call_llm_raises_at_once_when_reasoning_uses_the_whole_budget(monkeypatch):
+    cut = {"choices": [{"message": {"content": ""}, "finish_reason": "length"}]}
+    calls = fake_urlopen(monkeypatch, [cut, "ok"])
+    with pytest.raises(RuntimeError) as excinfo:
+        rag.call_llm("p", rag.DEFAULT_MODEL, "k")
+    assert "max_tokens=600" in str(excinfo.value) and rag.DEFAULT_MODEL in str(excinfo.value)
+    assert len(calls) == 1
+
+
 def test_all_chunks_reads_every_chunk_from_the_collection():
     from index import all_chunks
     assert all_chunks(FakeCollection(rows(0.25))) == [

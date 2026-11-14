@@ -39,9 +39,12 @@ SYSTEMS = ("rag_dense", "rag_hybrid", "bm25_rag", "no_rag")
 QUESTIONS = os.path.join(rag.ROOT, "data", "eval", "questions.json")
 RESULTS = os.path.join(rag.ROOT, "results")
 THRESHOLDS = [round(0.30 + 0.05 * i, 2) for i in range(11)]  # 0.30, 0.35, ..., 0.80
+JUDGE_MAX_TOKENS = 4000  # the default model reasons before it replies; 600 tokens cut the judge reply off
 
-NO_RAG_PROMPT = """You are a medical assistant. Answer the question.
-If you do not know the answer, say exactly:
+# The refusal sentence names "the provided documents", so the prompt says that none are
+# given; without that, the model refused every question because it saw no documents.
+NO_RAG_PROMPT = """You are a medical assistant. No documents are given: answer the question
+from your own medical knowledge. Only if you do not know the answer, say exactly:
 "I cannot answer this question from the provided documents."
 
 Question: {question}
@@ -104,7 +107,8 @@ def judge_faithfulness(answer, hits, model, api_key):
     or the counts are not 0 <= supported <= total. A failed call raises.
     """
     # Faithfulness F = |supported statements| / |statements|, RAGAS: https://arxiv.org/abs/2309.15217
-    reply = rag.call_llm(JUDGE_PROMPT.format(context=rag.format_context(hits), answer=answer), model, api_key)
+    reply = rag.call_llm(JUDGE_PROMPT.format(context=rag.format_context(hits), answer=answer), model, api_key,
+                         max_tokens=JUDGE_MAX_TOKENS)
     match = re.search(r"\{.*?\}", reply, re.DOTALL)
     try:
         counts = json.loads(match.group(0)) if match else {}
