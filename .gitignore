@@ -11,3 +11,4 @@ graphify-out/cache/
 .obsidian/workspace*
 .venv/
 .pytest_cache/
+results/
