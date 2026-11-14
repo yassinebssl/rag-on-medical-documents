@@ -57,7 +57,7 @@
     "id": "A07",
     "question": "What single dose of primaquine is added to ACT for patients with P. falciparum malaria in low-transmission areas?",
     "answerable": true,
-    "ground_truth": "In low-transmission areas, a single dose of 0.25 mg/kg body weight of primaquine is given with ACT to patients with P. falciparum malaria to reduce transmission.",
+    "ground_truth": "In low-transmission areas, a single dose of 0.25 mg/kg body weight of primaquine is given with ACT to patients with P. falciparum malaria to reduce transmission, except pregnant women, infants aged under 6 months and women breastfeeding infants aged under 6 months.",
     "source": "WHO_09_Guidelines_for_the_treatment_of_malaria.pdf",
     "page": 12,
     "evidence": "In low-transmission areas, give a single dose of 0.25 mg/kg bw primaquine with ACT to patients with P. falciparum malaria (except pregnant women, infants aged < 6 months and women breastfeeding infants aged < 6 months) to reduce transmission."
