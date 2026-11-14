@@ -176,6 +176,7 @@ def load_context():
     """Return the embedder, collection, BM25 index and API key; exit with one line if one is missing."""
     import index  # imported here so that importing rag stays light
     from bm25 import BM25
+    from chromadb.errors import NotFoundError
 
     api_key = load_env().get("OPENROUTER_API_KEY")
     if not api_key:
@@ -183,7 +184,7 @@ def load_context():
     empty = "The index is empty: run .venv/bin/python src/index.py first."
     try:
         collection = index.open_index()
-    except Exception:  # Chroma raises when the collection does not exist
+    except NotFoundError:  # the collection does not exist; other errors propagate unchanged
         raise SystemExit(empty)
     if collection.count() == 0:
         raise SystemExit(empty)

@@ -1,6 +1,7 @@
 """Tests for the Gradio app: result formatting, respond, load_context and build_app. Fakes only."""
 import gradio as gr
 import pytest
+from chromadb.errors import NotFoundError
 
 import app
 import index
@@ -56,7 +57,7 @@ def test_load_context_exits_with_one_line_when_the_key_is_missing(monkeypatch):
 def test_load_context_exits_when_the_index_is_missing_or_empty(monkeypatch):
     def missing():
         """Fail like Chroma when the collection does not exist."""
-        raise ValueError("Collection medical_docs does not exist.")
+        raise NotFoundError("Collection [medical_docs] does not exist")
     def no_embedder():
         """Fail the test if the embedder is loaded."""
         raise AssertionError("load_embedder must not be called")
@@ -67,6 +68,19 @@ def test_load_context_exits_when_the_index_is_missing_or_empty(monkeypatch):
         with pytest.raises(SystemExit) as exc:
             app.load_context()
         assert "src/index.py" in str(exc.value) and "\n" not in str(exc.value)
+
+def test_load_context_lets_other_index_errors_through(monkeypatch):
+    def locked():
+        """Fail with an error that is not a missing index."""
+        raise PermissionError("locked")
+    def no_embedder():
+        """Fail the test if the embedder is loaded."""
+        raise AssertionError("load_embedder must not be called")
+    monkeypatch.setattr(rag, "load_env", lambda: {"OPENROUTER_API_KEY": "k"})
+    monkeypatch.setattr(index, "load_embedder", no_embedder)
+    monkeypatch.setattr(index, "open_index", locked)
+    with pytest.raises(PermissionError, match="locked"):
+        app.load_context()
 
 def test_build_app_constructs_without_launching():
     assert isinstance(app.build_app({"embedder": None, "collection": None, "bm25": None, "api_key": "k"}), gr.Blocks)
