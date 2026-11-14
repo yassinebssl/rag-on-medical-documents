@@ -1,5 +1,6 @@
 # Data and secrets: never commit (see vault/02-Rules-and-Deadlines.md)
-data/raw/
+data/raw/*
+!data/raw/manifest.json
 data/processed/
 chroma_db/
 .env

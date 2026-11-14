@@ -1,0 +1,352 @@
+[
+  {
+    "source": "WHO IRIS",
+    "file": "data/raw/who/WHO_07_Guidelines_for_the_management_and_care_of_diabetes_mellitus_quick_refe.pdf",
+    "title": "Guidelines for the management and care of diabetes mellitus: quick reference guide",
+    "url": "https://iris.who.int/server/api/core/bitstreams/70bce44e-ed30-4d6c-90ad-52e52538f49a/content",
+    "bytes": 69248
+  },
+  {
+    "source": "WHO IRIS",
+    "file": "data/raw/who/WHO_04_Guideline_sodium_intake_for_adults_and_children.pdf",
+    "title": "Guideline: sodium intake for adults and children",
+    "url": "https://iris.who.int/server/api/core/bitstreams/d0f9feb5-ed78-44d1-9e06-533a93352012/content",
+    "bytes": 412840
+  },
+  {
+    "source": "WHO IRIS",
+    "file": "data/raw/who/WHO_08_Guidelines_for_the_management_of_dyslipidaemia_in_patients_with_diabet.pdf",
+    "title": "Guidelines for the management of dyslipidaemia in patients with diabetes mellitus: quick reference guide",
+    "url": "https://iris.who.int/server/api/core/bitstreams/b62f79da-50aa-4a07-aeb9-69a61fdee7bd/content",
+    "bytes": 309468
+  },
+  {
+    "source": "WHO IRIS",
+    "file": "data/raw/who/WHO_06_Management_of_diabetes_mellitus_standards_of_care_and_clinical_practic.pdf",
+    "title": "Management of diabetes mellitus: standards of care and clinical practice guidelines",
+    "url": "https://iris.who.int/server/api/core/bitstreams/08028ecb-ba39-4cfc-b143-acb8f57af1b9/content",
+    "bytes": 584646
+  },
+  {
+    "source": "WHO IRIS",
+    "file": "data/raw/who/WHO_02_Guideline_for_the_pharmacological_treatment_of_hypertension_in_adults.pdf",
+    "title": "Guideline for the pharmacological treatment of hypertension in adults",
+    "url": "https://iris.who.int/server/api/core/bitstreams/f062769d-f075-4a00-87af-0a2106e0bd04/content",
+    "bytes": 843539
+  },
+  {
+    "source": "WHO IRIS",
+    "file": "data/raw/who/WHO_05_Guidelines_for_the_prevention_management_and_care_of_diabetes_mellitus.pdf",
+    "title": "Guidelines for the prevention, management and care of diabetes mellitus",
+    "url": "https://iris.who.int/server/api/core/bitstreams/dbd3571c-0abc-43df-8192-bd9e2793ab08/content",
+    "bytes": 860896
+  },
+  {
+    "source": "WHO IRIS",
+    "file": "data/raw/who/WHO_01_Clinical_guidelines_for_the_management_of_hypertension.pdf",
+    "title": "Clinical guidelines for the management of hypertension",
+    "url": "https://iris.who.int/server/api/core/bitstreams/0b066a30-0197-4445-abfd-d7a4999b26b9/content",
+    "bytes": 1109526
+  },
+  {
+    "source": "WHO IRIS",
+    "file": "data/raw/who/WHO_13_Treatment_of_tuberculosis_guidelines.pdf",
+    "title": "Treatment of tuberculosis:  guidelines",
+    "url": "https://iris.who.int/server/api/core/bitstreams/05c9871e-852d-493c-99a2-c7b419c90098/content",
+    "bytes": 1084572
+  },
+  {
+    "source": "WHO IRIS",
+    "file": "data/raw/who/WHO_14_Costing_guidelines_for_tuberculosis_interventions.pdf",
+    "title": "Costing guidelines for tuberculosis interventions",
+    "url": "https://iris.who.int/server/api/core/bitstreams/20be9f11-eb7b-491b-90f9-4e11cc46a5d9/content",
+    "bytes": 6411860
+  },
+  {
+    "source": "WHO IRIS",
+    "file": "data/raw/who/WHO_15_WHO_consolidated_guidelines_on_tuberculosis_module_6_tuberculosis_and_.pdf",
+    "title": "WHO consolidated guidelines on tuberculosis: module 6: tuberculosis and comorbidities",
+    "url": "https://iris.who.int/server/api/core/bitstreams/c7e3e53f-e6d5-4f9f-a72e-86afbda89cea/content",
+    "bytes": 1641888
+  },
+  {
+    "source": "WHO IRIS",
+    "file": "data/raw/who/WHO_11_Guidelines_on_prevention_of_the_reintroduction_of_malaria.pdf",
+    "title": "Guidelines on prevention of the reintroduction of malaria",
+    "url": "https://iris.who.int/server/api/core/bitstreams/502e9c2f-99a0-461b-ac0a-f5d883ff7ae8/content",
+    "bytes": 1250679
+  },
+  {
+    "source": "WHO IRIS",
+    "file": "data/raw/who/WHO_18_Guidelines_for_HIV_mortality_measurement.pdf",
+    "title": "Guidelines for HIV mortality measurement",
+    "url": "https://iris.who.int/server/api/core/bitstreams/8716d55b-b48c-4091-8c63-4f7f382ae4b8/content",
+    "bytes": 1058494
+  },
+  {
+    "source": "WHO IRIS",
+    "file": "data/raw/who/WHO_09_Guidelines_for_the_treatment_of_malaria.pdf",
+    "title": "Guidelines for the treatment of malaria",
+    "url": "https://iris.who.int/server/api/core/bitstreams/ca4597bf-647a-4cde-b150-9a4e1e5b991c/content",
+    "bytes": 2540174
+  },
+  {
+    "source": "WHO IRIS",
+    "file": "data/raw/who/WHO_19_Consolidated_HIV_guidelines_service_delivery.pdf",
+    "title": "Consolidated HIV guidelines: service delivery",
+    "url": "https://iris.who.int/server/api/core/bitstreams/191cf39d-bb1b-4031-a9c0-6e939fb4d3af/content",
+    "bytes": 1406585
+  },
+  {
+    "source": "WHO IRIS",
+    "file": "data/raw/who/WHO_22_WHO_recommendations_on_antenatal_care_for_a_positive_pregnancy_experie.pdf",
+    "title": "WHO recommendations on antenatal care for a positive pregnancy experience",
+    "url": "https://iris.who.int/server/api/core/bitstreams/9dccde13-3593-4a22-9237-61abe5a3c6b7/content",
+    "bytes": 3903602
+  },
+  {
+    "source": "WHO IRIS",
+    "file": "data/raw/who/WHO_23_Improving_antenatal_care_in_prisons.pdf",
+    "title": "Improving antenatal care in prisons",
+    "url": "https://iris.who.int/server/api/core/bitstreams/aa73922d-3943-41d8-902b-497263f9eaba/content",
+    "bytes": 789982
+  },
+  {
+    "source": "WHO IRIS",
+    "file": "data/raw/who/WHO_21_Guidelines_for_conducting_HIV_behavioural_surveillance.pdf",
+    "title": "Guidelines for conducting HIV behavioural surveillance",
+    "url": "https://iris.who.int/server/api/core/bitstreams/e27e3091-9cb9-402e-8bcc-a15c9b9b8697/content",
+    "bytes": 158764
+  },
+  {
+    "source": "WHO IRIS",
+    "file": "data/raw/who/WHO_20_Guidelines_for_HIV_post_exposure_prophylaxis.pdf",
+    "title": "Guidelines for HIV post-exposure prophylaxis",
+    "url": "https://iris.who.int/server/api/core/bitstreams/fc3c8ce2-35d8-4b39-93b1-cb4d060767f0/content",
+    "bytes": 470696
+  },
+  {
+    "source": "WHO IRIS",
+    "file": "data/raw/who/WHO_25_What_is_the_effectiveness_of_antenatal_care_supplement.pdf",
+    "title": "What is the effectiveness of antenatal care? (supplement)",
+    "url": "https://iris.who.int/server/api/core/bitstreams/68a29606-db8d-4ac9-b0e6-5b317fba8146/content",
+    "bytes": 296250
+  },
+  {
+    "source": "WHO IRIS",
+    "file": "data/raw/who/WHO_24_Antenatal_care_and_maternal_health.pdf",
+    "title": "Antenatal care and maternal health",
+    "url": "https://iris.who.int/server/api/core/bitstreams/376f8c51-a4b2-452b-b629-5afe6b3cc89c/content",
+    "bytes": 721243
+  },
+  {
+    "source": "PubMed Central OA (full text XML)",
+    "file": "data/raw/pubmed/PMC_PMC13687808_Availability_and_reimbursement_of_fixed_dose_combi.txt",
+    "title": "Availability and reimbursement of fixed-dose combination medicines for hypertension treatment in Central and Eastern Europe.",
+    "url": "https://www.ebi.ac.uk/europepmc/webservices/rest/PMC13687808/fullTextXML",
+    "bytes": 62099
+  },
+  {
+    "source": "PubMed Central OA (full text XML)",
+    "file": "data/raw/pubmed/PMC_PMC13344169_Hypertension_Treatment_Intentions_A_Health_Belief_.txt",
+    "title": "Hypertension Treatment Intentions: A Health Belief Model Analysis.",
+    "url": "https://www.ebi.ac.uk/europepmc/webservices/rest/PMC13344169/fullTextXML",
+    "bytes": 7348
+  },
+  {
+    "source": "PubMed Central OA (full text XML)",
+    "file": "data/raw/pubmed/PMC_PMC13426017_The_Evolving_Landscape_of_Pulmonary_Hypertension_T.txt",
+    "title": "The Evolving Landscape of Pulmonary Hypertension Treatment: From Vasodilation to Disease Modification.",
+    "url": "https://www.ebi.ac.uk/europepmc/webservices/rest/PMC13426017/fullTextXML",
+    "bytes": 31040
+  },
+  {
+    "source": "PubMed Central OA (full text XML)",
+    "file": "data/raw/pubmed/PMC_PMC13384146_Personalised_approach_to_hypertension_treatment_pr.txt",
+    "title": "Personalised approach to hypertension treatment: protocol for the HYPERMARKER randomised controlled trial.",
+    "url": "https://www.ebi.ac.uk/europepmc/webservices/rest/PMC13384146/fullTextXML",
+    "bytes": 31289
+  },
+  {
+    "source": "PubMed Central OA (full text XML)",
+    "file": "data/raw/pubmed/PMC_PMC13420192_Impact_evaluation_of_the_Hypertension_Treatment_in.txt",
+    "title": "Impact evaluation of the Hypertension Treatment in Nigeria program using the Translational Science Benefits Model.",
+    "url": "https://www.ebi.ac.uk/europepmc/webservices/rest/PMC13420192/fullTextXML",
+    "bytes": 35967
+  },
+  {
+    "source": "PubMed Central OA (full text XML)",
+    "file": "data/raw/pubmed/PMC_PMC13118107_Assessment_of_Stage_Two_Hypertension_Treatment_Pla.txt",
+    "title": "Assessment of Stage Two Hypertension Treatment Plans Written by Generative AI.",
+    "url": "https://www.ebi.ac.uk/europepmc/webservices/rest/PMC13118107/fullTextXML",
+    "bytes": 31994
+  },
+  {
+    "source": "PubMed Central OA (full text XML)",
+    "file": "data/raw/pubmed/PMC_PMC12950835_Zilebesiran_an_RNA_interference_agent_its_need_and.txt",
+    "title": "Zilebesiran: an RNA interference agent-its need and potential to transform hypertension treatment.",
+    "url": "https://www.ebi.ac.uk/europepmc/webservices/rest/PMC12950835/fullTextXML",
+    "bytes": 28562
+  },
+  {
+    "source": "PubMed Central OA (full text XML)",
+    "file": "data/raw/pubmed/PMC_PMC13346473_The_effects_of_multitype_prompt_engineering_for_la.txt",
+    "title": "The effects of multitype prompt engineering for large language models in hypertension treatment decisions.",
+    "url": "https://www.ebi.ac.uk/europepmc/webservices/rest/PMC13346473/fullTextXML",
+    "bytes": 55903
+  },
+  {
+    "source": "PubMed Central OA (full text XML)",
+    "file": "data/raw/pubmed/PMC_PMC13100455_Hypertension_Treatment_Cascade_in_Rural_Delhi_Prev.txt",
+    "title": "Hypertension Treatment Cascade in Rural Delhi: Prevalence, Awareness, Treatment, and Control Among Adults.",
+    "url": "https://www.ebi.ac.uk/europepmc/webservices/rest/PMC13100455/fullTextXML",
+    "bytes": 22913
+  },
+  {
+    "source": "PubMed Central OA (full text XML)",
+    "file": "data/raw/pubmed/PMC_PMC13019770_Understanding_the_role_of_family_social_support_in.txt",
+    "title": "Understanding the role of family social support in the medication adherence to hypertension treatment in Cambodia.",
+    "url": "https://www.ebi.ac.uk/europepmc/webservices/rest/PMC13019770/fullTextXML",
+    "bytes": 27957
+  },
+  {
+    "source": "PubMed Central OA (full text XML)",
+    "file": "data/raw/pubmed/PMC_PMC12173044_Pulmonary_arterial_hypertension_treatment_A_new_er.txt",
+    "title": "Pulmonary arterial hypertension treatment. A new era.",
+    "url": "https://www.ebi.ac.uk/europepmc/webservices/rest/PMC12173044/fullTextXML",
+    "bytes": 30129
+  },
+  {
+    "source": "PubMed Central OA (full text XML)",
+    "file": "data/raw/pubmed/PMC_PMC13287168_Patient_Preferences_for_Hypertension_Treatment_Out.txt",
+    "title": "Patient Preferences for Hypertension Treatment Outcomes: A Quantitative Field Study Using the Analytic Hierarchy Process.",
+    "url": "https://www.ebi.ac.uk/europepmc/webservices/rest/PMC13287168/fullTextXML",
+    "bytes": 40767
+  },
+  {
+    "source": "PubMed Central OA (full text XML)",
+    "file": "data/raw/pubmed/PMC_PMC13512607_Enhancing_Type_2_Diabetes_Management_Involving_Hea.txt",
+    "title": "Enhancing Type 2 Diabetes Management Involving Healthcare Professionals in Primary Care.",
+    "url": "https://www.ebi.ac.uk/europepmc/webservices/rest/PMC13512607/fullTextXML",
+    "bytes": 38214
+  },
+  {
+    "source": "PubMed Central OA (full text XML)",
+    "file": "data/raw/pubmed/PMC_PMC12990594_Is_there_still_room_for_pioglitazone_in_contempora.txt",
+    "title": "Is there still room for pioglitazone in contemporary type 2 diabetes management?",
+    "url": "https://www.ebi.ac.uk/europepmc/webservices/rest/PMC12990594/fullTextXML",
+    "bytes": 6455
+  },
+  {
+    "source": "PubMed Central OA (full text XML)",
+    "file": "data/raw/pubmed/PMC_PMC13297350_Mediterranean_Dietary_Pattern_in_Type_2_Diabetes_M.txt",
+    "title": "Mediterranean Dietary Pattern in Type 2 Diabetes Management: Pathways and Clinical Evidence.",
+    "url": "https://www.ebi.ac.uk/europepmc/webservices/rest/PMC13297350/fullTextXML",
+    "bytes": 64788
+  },
+  {
+    "source": "PubMed Central OA (full text XML)",
+    "file": "data/raw/pubmed/PMC_PMC13704070_The_Impact_of_an_Integrated_County_Township_Villag.txt",
+    "title": "The Impact of an Integrated County-Township-Village Care Model on Type 2 Diabetes Management in Resource-Constrained Areas in China: A Synthetic Control Method.",
+    "url": "https://www.ebi.ac.uk/europepmc/webservices/rest/PMC13704070/fullTextXML",
+    "bytes": 40666
+  },
+  {
+    "source": "PubMed Central OA (full text XML)",
+    "file": "data/raw/pubmed/PMC_PMC13610769_Harnessing_Medicinal_Plants_Through_Advanced_Drug_.txt",
+    "title": "Harnessing Medicinal Plants Through Advanced Drug Delivery: A New Era in Type 2 Diabetes Management.",
+    "url": "https://www.ebi.ac.uk/europepmc/webservices/rest/PMC13610769/fullTextXML",
+    "bytes": 126431
+  },
+  {
+    "source": "PubMed Central OA (full text XML)",
+    "file": "data/raw/pubmed/PMC_PMC13457809_Implementing_SGLT2_Inhibitor_Therapy_in_Line_with_.txt",
+    "title": "Implementing SGLT2 Inhibitor Therapy in Line with the New NICE Guidelines for Type 2 Diabetes Management.",
+    "url": "https://www.ebi.ac.uk/europepmc/webservices/rest/PMC13457809/fullTextXML",
+    "bytes": 66069
+  },
+  {
+    "source": "PubMed Central OA (full text XML)",
+    "file": "data/raw/pubmed/PMC_PMC13098859_Saudi_family_physician_s_clinical_inertia_of_type_.txt",
+    "title": "Saudi family physician's clinical inertia of type 2 diabetes management.",
+    "url": "https://www.ebi.ac.uk/europepmc/webservices/rest/PMC13098859/fullTextXML",
+    "bytes": 17926
+  },
+  {
+    "source": "PubMed Central OA (full text XML)",
+    "file": "data/raw/pubmed/PMC_PMC13295857_Probiotic_Modulation_of_Gut_Microbiota_Antioxidant.txt",
+    "title": "Probiotic Modulation of Gut Microbiota: Antioxidant Mechanisms and Clinical Benefits in Obesity and Type 2 Diabetes Management",
+    "url": "https://www.ebi.ac.uk/europepmc/webservices/rest/PMC13295857/fullTextXML",
+    "bytes": 92254
+  },
+  {
+    "source": "PubMed Central OA (full text XML)",
+    "file": "data/raw/pubmed/PMC_PMC13450512_Cost_effectiveness_of_community_based_intervention.txt",
+    "title": "Cost-effectiveness of community-based interventions for type 2 diabetes management in Indonesia: a time-horizon sensitivity analysis.",
+    "url": "https://www.ebi.ac.uk/europepmc/webservices/rest/PMC13450512/fullTextXML",
+    "bytes": 38762
+  },
+  {
+    "source": "PubMed Central OA (full text XML)",
+    "file": "data/raw/pubmed/PMC_PMC13238088_Costs_and_cost_effectiveness_of_type_2_diabetes_ma.txt",
+    "title": "Costs and cost-effectiveness of type 2 diabetes management in Sub-Saharan Africa: a systematic review.",
+    "url": "https://www.ebi.ac.uk/europepmc/webservices/rest/PMC13238088/fullTextXML",
+    "bytes": 54212
+  },
+  {
+    "source": "PubMed Central OA (full text XML)",
+    "file": "data/raw/pubmed/PMC_PMC13071239_Economic_burden_of_type_2_diabetes_management_in_F.txt",
+    "title": "Economic burden of type 2 diabetes management in France according to clinical characteristics.",
+    "url": "https://www.ebi.ac.uk/europepmc/webservices/rest/PMC13071239/fullTextXML",
+    "bytes": 41980
+  },
+  {
+    "source": "PubMed Central OA (full text XML)",
+    "file": "data/raw/pubmed/PMC_PMC13079704_Legume_intake_on_gut_microbiome_and_glycemia_in_ty.txt",
+    "title": "Legume intake on gut microbiome and glycemia in type 2 diabetes management: narrative review.",
+    "url": "https://www.ebi.ac.uk/europepmc/webservices/rest/PMC13079704/fullTextXML",
+    "bytes": 34212
+  },
+  {
+    "source": "PubMed Central OA (full text XML)",
+    "file": "data/raw/pubmed/PMC_PMC13327478_Large_Scale_Evaluation_of_Traditional_Chinese_Medi.txt",
+    "title": "Large-Scale Evaluation of Traditional Chinese Medicines Reveals Potential PPARγ Modulators for Type 2 Diabetes Management.",
+    "url": "https://www.ebi.ac.uk/europepmc/webservices/rest/PMC13327478/fullTextXML",
+    "bytes": 34064
+  },
+  {
+    "source": "PubMed Central OA (full text XML)",
+    "file": "data/raw/pubmed/PMC_PMC13616126_Ethnopharmacological_insights_into_type_2_diabetes.txt",
+    "title": "Ethnopharmacological insights into type 2 diabetes management by traditional Moroccan herbal teas: HPLC-MS characterization of phenolic compounds and their related antioxidant and enzyme inhibitory activities.",
+    "url": "https://www.ebi.ac.uk/europepmc/webservices/rest/PMC13616126/fullTextXML",
+    "bytes": 57885
+  },
+  {
+    "source": "PubMed Central OA (full text XML)",
+    "file": "data/raw/pubmed/PMC_PMC13156370_Optimizing_Type_2_Diabetes_Management_in_Iraq_Expe.txt",
+    "title": "Optimizing Type 2 Diabetes Management in Iraq: Expert Consensus on Initiation and Intensification of Insulin-Based Treatment Options.",
+    "url": "https://www.ebi.ac.uk/europepmc/webservices/rest/PMC13156370/fullTextXML",
+    "bytes": 39971
+  },
+  {
+    "source": "PubMed Central OA (full text XML)",
+    "file": "data/raw/pubmed/PMC_PMC11554734_Paracetamol_Dosing_Errors_in_People_Aged_12_Years_.txt",
+    "title": "Paracetamol Dosing Errors in People Aged 12 Years and Over: An Analysis of Over 14,000 Cases Reported to an Australian Poisons Information Centre.",
+    "url": "https://www.ebi.ac.uk/europepmc/webservices/rest/PMC11554734/fullTextXML",
+    "bytes": 53650
+  },
+  {
+    "source": "PubMed Central OA (full text XML)",
+    "file": "data/raw/pubmed/PMC_PMC11131027_Cytokeratin_18_is_a_sensitive_biomarker_of_alanine.txt",
+    "title": "Cytokeratin-18 is a sensitive biomarker of alanine transaminase increase in a placebo-controlled, randomized, crossover trial of therapeutic paracetamol dosing (PATH-BP biomarker substudy).",
+    "url": "https://www.ebi.ac.uk/europepmc/webservices/rest/PMC11131027/fullTextXML",
+    "bytes": 26001
+  },
+  {
+    "source": "PubMed Central OA (full text XML)",
+    "file": "data/raw/pubmed/PMC_PMC9546042_Paracetamol_dosing_in_hospital_and_on_discharge_fo.txt",
+    "title": "Paracetamol dosing in hospital and on discharge for older people who are frail or have low body weight.",
+    "url": "https://www.ebi.ac.uk/europepmc/webservices/rest/PMC9546042/fullTextXML",
+    "bytes": 27564
+  }
+]

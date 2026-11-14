@@ -4,16 +4,23 @@ Sources (see vault/01-Project-Brief.md):
 - WHO guidelines and publications, via the WHO IRIS public REST API.
 - PubMed Central open-access articles, via the Europe PMC REST API.
 
-The script works in two passes. First it collects candidate PDF links from
-many topics (cheap JSON calls). Then it downloads candidates in parallel and
-keeps the first successful files. Each download has a short timeout, so one
-slow file cannot stall the run.
+The script works in two passes. First it collects candidates from many topics
+(cheap JSON calls). Then it downloads candidates in parallel and keeps the first
+successful files. Each download has a short timeout, so one slow file cannot
+stall the run.
 
-Files land in data/raw/who/ and data/raw/pubmed/. Only real PDFs under 15 MB
-are kept. data/raw/manifest.json records source URL, size and title per file.
+WHO documents land in data/raw/who/ as PDF files (only real PDFs under 15 MB are
+kept). PubMed articles land in data/raw/pubmed/ as plain-text files taken from the
+Europe PMC full-text XML. data/raw/manifest.json records source URL, size and
+title per file.
+
+With --from-manifest, the script does not search: it downloads every document
+listed in data/raw/manifest.json again, under its recorded file name, and leaves
+the manifest unchanged.
 
 Usage:
     python3 scripts/fetch_corpus.py --who 20 --pubmed 30
+    python3 scripts/fetch_corpus.py --from-manifest
 """
 import argparse
 import concurrent.futures as futures
@@ -227,18 +234,59 @@ def fetch_pubmed_text(pubs, out_dir, target, manifest):
     return kept
 
 
+def fetch_from_manifest():
+    """Download every document of data/raw/manifest.json under its recorded file path.
+
+    A .pdf entry is downloaded from its URL with download_pdf; a .txt entry is fetched
+    with pubmed_fulltext, with the PMC id taken from its URL (.../rest/<PMCID>/fullTextXML).
+    A failed or unusable download is printed and skipped. The manifest is not rewritten.
+    Returns the number of files written.
+    """
+    with open(os.path.join(RAW, "manifest.json"), encoding="utf-8") as fh:
+        manifest = json.load(fh)
+    written = 0
+    for entry in manifest:
+        path = os.path.join(ROOT, entry["file"])
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        try:
+            if entry["file"].endswith(".pdf"):
+                ok = download_pdf(entry["url"], path) is not None
+            else:  # .txt: PubMed article text
+                text = pubmed_fulltext(entry["url"].split("/")[-2])
+                ok = text is not None
+                if ok:
+                    with open(path, "w", encoding="utf-8") as fh:
+                        fh.write(text)
+        except Exception as exc:
+            print(f"failed {entry['file']}: {exc}", flush=True)
+            continue
+        if ok:
+            written += 1
+            print(f"ok {entry['file']}", flush=True)
+        else:
+            print(f"not usable: {entry['file']}", flush=True)
+    print(f"done: {written}/{len(manifest)} files written", flush=True)
+    return written
+
+
 def main():
+    """Parse the command line, then fetch from the manifest or search, download and write the manifest."""
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--who", type=int, default=20, help="number of WHO PDFs")
-    parser.add_argument("--pubmed", type=int, default=30, help="number of PubMed OA PDFs")
+    parser.add_argument("--pubmed", type=int, default=30, help="number of PubMed OA articles (saved as text files)")
+    parser.add_argument("--from-manifest", action="store_true",
+                        help="download the documents listed in data/raw/manifest.json under their recorded names")
     args = parser.parse_args()
+    if args.from_manifest:
+        fetch_from_manifest()
+        return
 
     os.makedirs(RAW, exist_ok=True)
     manifest = []
 
     who = collect_who(args.who * 2)
     who_jobs = [(t, u, f"WHO_{i + 1:02d}_{slug(t)}.pdf") for i, (t, u) in enumerate(who)]
-    who_kept = fetch_parallel(who_jobs, os.path.join(RAW, "who"), args.who, "who", manifest)
+    who_kept = fetch_parallel(who_jobs, os.path.join(RAW, "who"), args.who, "WHO IRIS", manifest)
 
     pubs = collect_pubmed(args.pubmed * 2)
     pub_kept = fetch_pubmed_text(pubs, os.path.join(RAW, "pubmed"), args.pubmed, manifest)
@@ -246,7 +294,7 @@ def main():
     with open(os.path.join(RAW, "manifest.json"), "w", encoding="utf-8") as fh:
         json.dump(manifest, fh, indent=2, ensure_ascii=False)
     total_mb = sum(m["bytes"] for m in manifest) / (1024 * 1024)
-    print(f"done: {who_kept} WHO + {pub_kept} PubMed PDFs, {total_mb:.1f} MB total", flush=True)
+    print(f"done: {who_kept} WHO PDFs + {pub_kept} PubMed text files, {total_mb:.1f} MB total", flush=True)
 
 
 if __name__ == "__main__":
