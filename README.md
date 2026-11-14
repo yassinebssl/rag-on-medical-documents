@@ -1,6 +1,6 @@
 # RAG on Medical Documents
 
-This project answers medical questions from a small set of guidelines and articles. It finds the passages that best match a question, gives them to a free language model, and returns an answer in which every claim points to one of those passages by source and page. When the retrieved passages are too far from the question, or the model does not cite them, it replies "I cannot answer this question from the provided documents." instead of guessing.
+This project answers medical questions from a small set of guidelines and articles. It finds the passages that best match a question, gives them to a free language model, and returns an answer that cites those passages by number, shown as the source (and the page for WHO guidelines). When the retrieved passages are too far from the question, or the model does not cite them, it replies "I cannot answer this question from the provided documents." instead of guessing.
 
 This is a student project. It is not medical advice, and its answers must be checked with a clinician.
 
