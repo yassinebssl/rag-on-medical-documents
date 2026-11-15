@@ -1,0 +1,183 @@
+% Checkpoint 1 deck (2026-11-22): 5 minutes, plan, architecture, dataset, task split.
+% Compile from this directory: pdflatex main.tex (twice). See ../README.md.
+% Every number comes from data/raw/manifest.json, data/eval/questions.json,
+% results/*.csv, README.md, docs/build-your-own-rag.md or a commit message.
+% Speaker for each slide: \note{} (hidden in the PDF; show with \setbeameroption{show notes}).
+\documentclass[12pt,aspectratio=169]{beamer}
+\usetheme[progressbar=frametitle,numbering=fraction]{metropolis}
+\usepackage[T1]{fontenc}
+\usepackage[sfdefault]{FiraSans}
+\usepackage[scale=0.85]{FiraMono}
+\usepackage{booktabs}
+\usepackage{adjustbox}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta,positioning,fit,backgrounds}
+
+\newcommand{\TODO}[1]{\textcolor{red}{\textbf{TODO:} #1}}
+\setbeamertemplate{note page}[plain]
+% Metropolis draws the title page in a box of \paperheight, which is reported as an
+% overfull \vbox on every deck; the same layout in a shorter box fits.
+\makeatletter
+\setbeamertemplate{title page}{%
+  \begin{minipage}[c][0.85\textheight]{\textwidth}
+    \vfill
+    \usebeamertemplate*{title}
+    \usebeamertemplate*{subtitle}
+    \usebeamertemplate*{title separator}
+    \usebeamertemplate*{author}
+    \usebeamertemplate*{date}
+    \usebeamertemplate*{institute}
+    \vfill
+  \end{minipage}}
+\makeatother
+
+\title{Trustworthy RAG on Medical Documents}
+\subtitle{Checkpoint 1: plan, architecture, dataset, task split}
+\author{Boussoualim Yassine \and Benahcene Mohamed Wassim \and Aissaoui Anes Safouane \and Djerdali Mohamed Achraf}
+\setbeamerfont{author}{size=\small}
+\setbeamerfont{date}{size=\small}
+\institute{LLM Final Projects 2026--2027, Prof.\ A.\ Moussaoui, Project 2\\
+  Group \TODO{group number} \quad \TODO{school}}
+\date{22 November 2026}
+
+% Architecture as built (src/ingest.py, index.py, bm25.py, rag.py, rerank.py, app.py).
+\newcommand{\archfigure}{%
+\begin{tikzpicture}[
+    box/.style={draw=black!60, rounded corners=3pt, fill=##1, align=center,
+                text width=2.1cm, minimum height=1.5cm, font=\footnotesize,
+                execute at begin node={\hyphenpenalty=10000\relax}},
+    box/.default=black!5,
+    arr/.style={-{Stealth[length=2.2mm]}, thick, black!70},
+    lab/.style={font=\footnotesize\bfseries, black!70, anchor=south west, inner sep=1pt}]
+  % offline row
+  \node[box] (docs)  at (0,0)   {50 docs\\20 WHO PDF\\30 PMC text};
+  \node[box] (chunk) at (2.5,0) {Chunks\\512 tokens\\102 overlap};
+  \node[box] (emb)   at (5,0)   {Embed\\BGE-M3};
+  \node[box] (store) at (7.5,0) {Chroma\\(cosine)\\+ BM25};
+  \draw[arr] (docs) -- (chunk);
+  \draw[arr] (chunk) -- (emb);
+  \draw[arr] (emb) -- (store);
+  \node[lab] at (docs.north west) [yshift=2pt] {Offline: build the index once};
+  % online row
+  \node[box=blue!8]    (q)     at (0,-2.65)    {Question};
+  \node[box=blue!8]    (ret)   at (2.5,-2.65)  {Dense 20\\BM25 20\\RRF: top 5};
+  \node[box=orange!15] (gate)  at (5,-2.65)    {Gate\\MiniLM\\score $\geq 0.5$?};
+  \node[box=blue!8]    (llm)   at (7.5,-2.65)  {Free LLM\\passages\\{[}1{]}--{[}5{]}};
+  \node[box=orange!15] (check) at (10,-2.65)   {Citation\\check};
+  \node[box=green!12]  (ans)   at (12.5,-2.65) {Answer\\{[}source, p.\,N{]}};
+  \draw[arr] (q) -- (ret);
+  \draw[arr] (ret) -- (gate);
+  \draw[arr] (gate) -- (llm);
+  \draw[arr] (llm) -- (check);
+  \draw[arr] (check) -- (ans);
+  \draw[arr] (store.south) .. controls +(0,-0.8) and +(0.6,0.8) .. (ret.north east);
+  \node[box=red!10, text width=6.6cm, minimum height=0.9cm] (ref) at (7.5,-4.7)
+     {Refusal: \emph{``I cannot answer this question from the provided documents.''}};
+  \draw[arr] (gate.south) -- node[left, font=\footnotesize] {no} (gate.south |- ref.north);
+  \draw[arr] (check.south) -- node[right, font=\footnotesize] {fail} (check.south |- ref.north);
+  \begin{scope}[on background layer]
+    \node[draw=blue!40, dashed, rounded corners, inner sep=5pt,
+          fit=(q) (ans) (ref)] (app) {};
+  \end{scope}
+  \node[lab] at (app.north west) [yshift=1pt] {Online, in the Gradio app};
+\end{tikzpicture}}
+
+\begin{document}
+
+\begin{frame}
+  \titlepage
+  \note{Speaker: Djerdali Mohamed Achraf. Opens, names the four members and the project (15 s).}
+\end{frame}
+
+\begin{frame}{Topic and goal}
+  \begin{itemize}
+    \item Answer medical questions \alert{only} from WHO guidelines and PubMed OA articles
+    \item Every claim cites its passage: \texttt{[source, p.\,N]}
+    \item No good evidence $\Rightarrow$ fixed refusal sentence
+    \item Goal: measure it against an LLM alone and a BM25 RAG
+  \end{itemize}
+  \vfill
+  \small Student project. Not medical advice. Free LLMs only.
+  \note{Speaker: Djerdali Mohamed Achraf. Why: an LLM alone answers from memory, and a wrong dose reads as confidently as a right one.}
+\end{frame}
+
+\begin{frame}{Dataset: 50 documents}
+  \begin{tabular}{@{}lll@{}}
+    \toprule
+    Source & Count & Size \\
+    \midrule
+    WHO guidelines (PDF, WHO IRIS) & 20 & 25.9\,MB \\
+    PubMed Central OA (full text) & 30 & 1.3\,MB \\
+    \bottomrule
+  \end{tabular}
+  \bigskip
+  \begin{itemize}
+    \item Hypertension, diabetes, TB, malaria, HIV, antenatal care, paracetamol
+    \item 1530 records (1500 WHO pages) $\to$ 3410 chunks
+    \item Manifest: URL and size of every file, re-downloadable
+  \end{itemize}
+  \note{Speaker: Boussoualim Yassine. Sizes are the byte totals of data/raw/manifest.json. PubMed articles come as text because Europe PMC refuses PDFs to scripts. Two WHO PDFs are encrypted; pypdf reads them with cryptography.}
+\end{frame}
+
+\begin{frame}{Architecture (as built)}
+  \centering
+  \adjustbox{max width=\linewidth, max height=0.74\textheight}{\archfigure}
+  \note{Speaker: Aissaoui Anes Safouane. Offline: chunk, embed with BGE-M3, store in Chroma; BM25 is built in memory from the same chunks. Online: hybrid retrieval, cross-encoder gate (MiniLM, threshold 0.5), free LLM, citation check; two ways to refuse.}
+\end{frame}
+
+\begin{frame}{Evaluation plan}
+  \textbf{40 questions:} 20 answerable (A) \quad 10 out-of-corpus (O) \quad 10 held-out (N)
+  \medskip
+
+  \begin{tabular}{@{}ll@{}}
+    \toprule
+    System & What it tests \\
+    \midrule
+    \texttt{rag\_dense} & dense retrieval, cosine gate \\
+    \texttt{rag\_hybrid} & + BM25 fused by RRF \\
+    \texttt{rag\_rerank} & + cross-encoder gate (main) \\
+    \texttt{bm25\_rag} & baseline: BM25 only, no gate \\
+    \texttt{no\_rag} & baseline: LLM alone \\
+    \bottomrule
+  \end{tabular}
+  \medskip
+
+  \small Answer and refusal rates, hit rate, context precision, faithfulness, human rating
+  \note{Speaker: Benahcene Mohamed Wassim. A questions have a ground truth, page and verbatim quote (20/20 found in the corpus). N questions are on corpus topics but ask facts the corpus lacks; written before any result. 50 free requests a day, so the LLM run takes several days.}
+\end{frame}
+
+\begin{frame}{Task split}
+  \begin{tabular}{@{}lll@{}}
+    \toprule
+    Member & Owns & Writes \\
+    \midrule
+    Boussoualim Yassine & ingestion, retrieval, Git & Methodology \\
+    Benahcene M.\ Wassim & evaluation, baselines, data & Results, errors \\
+    Aissaoui Anes Safouane & prompt, gate, citations & Architecture, docs \\
+    Djerdali M.\ Achraf & Gradio app, video, slides & Intro, ethics \\
+    \bottomrule
+  \end{tabular}
+  \bigskip
+
+  \small Everyone reviews everyone's work; each member presents at the defense.
+  \note{Speaker: Boussoualim Yassine. Split from vault/05-Work-Plan.md.}
+\end{frame}
+
+\begin{frame}{Timeline to the hand-in}
+  \begin{tabular}{@{}ll@{}}
+    \toprule
+    Date & Milestone \\
+    \midrule
+    15 Nov & built: pipeline, app, 40 questions \\
+    from 15 Nov & LLM evaluation (50 requests/day) \\
+    22 Nov & Checkpoint 1 \\
+    4 Dec & Checkpoint 2: live demo \\
+    5--10 Dec & error analysis, report, docs, video \\
+    12 Dec & flash-drive hand-in (midnight) \\
+    13 Dec & defense: 20 min + 5 min questions \\
+    \bottomrule
+  \end{tabular}
+  \note{Speaker: Djerdali Mohamed Achraf. 10 December is our internal delivery target; 12 December midnight is the hard limit. Closes and takes questions.}
+\end{frame}
+
+\end{document}
