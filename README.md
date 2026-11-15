@@ -83,6 +83,14 @@ The run is resumable: every answer is appended to `results/records.jsonl`, and a
 
 `results/threshold_sweep.csv` is written by the `sweep` command, not by `run`.
 
+## Notebooks
+
+`notebooks/` walks through the system step by step, with the code of `src/`. None of them calls an LLM, so they use none of the daily quota. They are saved with their outputs, so they can be read without running them. To run them, install Jupyter (`.venv/bin/pip install notebook`, not in `requirements.txt` because the app does not need it) and start `.venv/bin/jupyter notebook notebooks/`.
+
+- `01_corpus_and_chunking.ipynb`: loads the 50 documents and cuts them into the 3,410 chunks of the index. Needs the corpus (Quick start, step 4).
+- `02_retrieval_and_refusal_gate.ipynb`: dense retrieval, BM25, rank fusion and the cross-encoder gate on one answerable question (A06) and one out-of-corpus question (O06), up to the prompt the LLM would receive. Needs the index.
+- `03_evaluation_results.ipynb`: the tables in `results/`. Rerun it after the evaluation is complete.
+
 ## Data
 
 The corpus has 50 documents: 20 WHO guidelines (PDF files from WHO IRIS) and 30 open-access articles from PubMed Central (full text from the Europe PMC API, stored as text files). The documents are not committed: `data/raw/` is ignored by git, except `data/raw/manifest.json`. The manifest is committed and records the documents actually used (source, file, title, URL and size of each document). `docs/dataset_links.md` lists the source URL of every document. It is generated from the manifest with `.venv/bin/python scripts/make_dataset_links.py`.
