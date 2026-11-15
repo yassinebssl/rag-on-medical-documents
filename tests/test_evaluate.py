@@ -176,7 +176,8 @@ def test_run_and_sweep_exit_with_the_load_context_message(tmp_path, monkeypatch)
     monkeypatch.setattr(rag, "load_context", missing)
     monkeypatch.setattr(rag, "load_env", lambda: {})
     monkeypatch.setattr(ev, "RESULTS", str(tmp_path / "results"))
-    for call in [lambda: ev.run(["rag_dense"], ["m:free"], False, None), ev.sweep]:
+    for call in [lambda: ev.run(["rag_dense"], ["m:free"], False, None), ev.sweep,
+                 lambda: ev.retrieval(["medcpt"])]:
         with pytest.raises(SystemExit) as excinfo:
             call()
         assert str(excinfo.value) == "The index is empty: run .venv/bin/python src/index.py first."
@@ -188,3 +189,44 @@ def test_run_checks_the_model_ids_before_loading_the_context(monkeypatch):
     with pytest.raises(SystemExit) as excinfo:
         ev.run(["rag_dense"], ["openai/gpt-4o-mini"], False, None)
     assert "not a free model" in str(excinfo.value)
+
+def test_separation_of_fully_separated_scores():
+    points = [(0.9, True), (0.7, True), (0.5, False), (0.3, False)]
+    assert ev.separation(points) == {"auroc": 1.0, "margin": 0.2, "gap_share": 0.333}
+
+def test_separation_counts_ties_as_half_and_gives_a_negative_margin_on_overlap():
+    points = [(0.6, True), (0.4, True), (0.5, False), (0.4, False)]
+    assert ev.separation(points) == {"auroc": 0.625, "margin": -0.1, "gap_share": -0.5}
+
+RETRIEVAL_QUESTIONS = [
+    {"id": "A01", "question": "q1", "answerable": True, "source": "W.pdf", "page": 3},
+    {"id": "A02", "question": "q2", "answerable": True, "source": "Title.", "page": None},
+    {"id": "O01", "question": "q3", "answerable": False, "source": None, "page": None}]
+
+def test_evaluate_retrieval_scores_each_retriever_on_hits_pages_and_separation():
+    answers = {"q1": ([{"source": "X.pdf", "page": 1}, {"source": "W.pdf", "page": 3}], 0.8),
+               "q2": ([{"source": "Title.", "page": None}], 0.7),
+               "q3": ([{"source": "W.pdf", "page": 9}], 0.4)}
+    wrong_page = {"q1": ([{"source": "W.pdf", "page": 4}], 0.5), "q2": ([], 0.0), "q3": ([], 0.6)}
+    rows, per_question = ev.evaluate_retrieval(RETRIEVAL_QUESTIONS, {"good": answers.get, "bad": wrong_page.get})
+    good, bad = ({k: v for k, v in row.items() if k != "mean_latency_ms"} for row in rows)
+    assert good == {"retriever": "good", "hit_rate": 1.0, "page_hit_rate": 1.0, "context_precision": 0.75,
+                    "auroc": 1.0, "margin": 0.3, "gap_share": 0.75}
+    assert (bad["hit_rate"], bad["page_hit_rate"], bad["context_precision"], bad["auroc"]) == (0.5, 0.0, 0.5, 0.0)
+    assert per_question[0] == {"id": "A01", "answerable": True, "good_best": 0.8, "good_page_hit": True,
+                               "bad_best": 0.5, "bad_page_hit": False}
+    assert per_question[2]["good_page_hit"] == "" and per_question[2]["good_best"] == 0.4
+
+def test_retrieval_command_rejects_an_unknown_reranker(monkeypatch, capsys):
+    monkeypatch.setattr(ev, "retrieval", lambda names: 1 / 0)
+    monkeypatch.setattr("sys.argv", ["evaluate.py", "retrieval", "--rerankers", "medcpt,nope"])
+    with pytest.raises(SystemExit):
+        ev.main()
+    assert "unknown reranker(s) nope" in capsys.readouterr().err
+
+def test_run_system_rag_rerank_uses_bm25_and_the_reranker(monkeypatch):
+    seen = {}
+    monkeypatch.setattr(rag, "answer_question", lambda *a, **k: seen.update(k) or {"refused": True})
+    ev.run_system("rag_rerank", "q", {"embedder": None, "collection": None, "bm25": "B", "reranker": "R"},
+                  "m:free", "k", 0.6)
+    assert (seen["bm25"], seen["reranker"]) == ("B", "R") and "rag_rerank" in ev.SYSTEMS

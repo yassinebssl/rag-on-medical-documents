@@ -31,3 +31,16 @@ class FakeCollection:
         """Return every row in Chroma's flat get shape."""
         return {"ids": [r[0] for r in self.rows], "documents": [r[1] for r in self.rows],
                 "metadatas": [r[2] for r in self.rows]}
+
+
+class FakeReranker:
+    """Stands in for a cross-encoder: returns the given raw scores (logits), one per pair, in order."""
+
+    def __init__(self, scores):
+        """Keep the scores and record each batch of pairs."""
+        self.scores, self.calls = scores, []
+
+    def predict(self, pairs):
+        """Return the first len(pairs) scores."""
+        self.calls.append(pairs)
+        return self.scores[:len(pairs)]

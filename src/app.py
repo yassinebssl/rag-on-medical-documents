@@ -9,9 +9,12 @@ from rag import load_context
 
 DISCLAIMER = ("This tool is a student project. It is not medical advice. Check every answer with a clinician. "
               "Questions are sent to OpenRouter: do not type anything that identifies a patient.")
-DENSE, HYBRID = "Dense", "Hybrid (dense + BM25)"
+DENSE, HYBRID, RERANKED = "Dense", "Hybrid (dense + BM25)", "Hybrid + cross-encoder gate"
+MODES = {DENSE: rag.SIM_THRESHOLD, HYBRID: rag.SIM_THRESHOLD, RERANKED: rag.RERANK_THRESHOLD}  # default threshold
+DEFAULT_MODE = RERANKED
 NOT_IN_PASSAGES = "The retrieved passages do not contain the answer."
 REASONS = {"below_threshold": "Best similarity {best:.2f} is below the threshold.",
+           "below_rerank_threshold": "The cross-encoder rates the best passage {rerank:.2f}, below the threshold.",
            "uncited": "The model's answer did not cite the retrieved passages.",
            "model_refused": NOT_IN_PASSAGES,
            "no_context": NOT_IN_PASSAGES}
@@ -28,7 +31,7 @@ def format_result(res):
             for rank, hit in enumerate(res["hits"], 1)]
     answer = res["answer"]
     if res["refused"]:
-        answer += "\n\n" + REASONS[res["reason"]].format(best=res["best_similarity"])
+        answer += "\n\n" + REASONS[res["reason"]].format(best=res["best_similarity"], rerank=res.get("rerank_score"))
     return f"{answer}\n\n*{DISCLAIMER}*", rows
 
 
@@ -36,10 +39,11 @@ def respond(question, model, mode, threshold, ctx):
     """Answer one question from the UI; an empty question or a failed LLM call becomes a message."""
     if not question.strip():
         return "Type a question first.", []
-    bm25 = ctx["bm25"] if mode == HYBRID else None
-    try:
+    bm25 = ctx["bm25"] if mode in (HYBRID, RERANKED) else None
+    reranker = ctx["reranker"] if mode == RERANKED else None
+    try:  # the slider is the threshold of whichever gate the mode uses
         res = rag.answer_question(question, ctx["embedder"], ctx["collection"], model, ctx["api_key"],
-                                  threshold=threshold, bm25=bm25)
+                                  threshold=threshold, bm25=bm25, reranker=reranker, rerank_threshold=threshold)
     except Exception as exc:  # network, rate limit or empty reply: show it instead of crashing
         return f"The model call failed: {exc}", []
     return format_result(res)
@@ -53,8 +57,8 @@ def build_app(ctx):
         question = gr.Textbox(label="Question")
         with gr.Row():
             model = gr.Dropdown(rag.FREE_MODELS, value=rag.DEFAULT_MODEL, label="Model")
-            mode = gr.Radio([DENSE, HYBRID], value=HYBRID, label="Retrieval")
-            threshold = gr.Slider(0.0, 1.0, value=rag.SIM_THRESHOLD, step=0.05, label="Similarity threshold")
+            mode = gr.Radio(list(MODES), value=DEFAULT_MODE, label="Retrieval and refusal gate")
+            threshold = gr.Slider(0.0, 1.0, value=MODES[DEFAULT_MODE], step=0.05, label="Refusal threshold")
         ask = gr.Button("Ask", variant="primary")
         answer = gr.Markdown()
         sources = gr.Dataframe(headers=["#", "Source", "Page", "Similarity", "Cited"], interactive=False)
@@ -64,6 +68,7 @@ def build_app(ctx):
             """Call respond with the loaded context."""
             return respond(q, m, md, t, ctx)
 
+        mode.change(lambda m: MODES[m], mode, threshold)  # each gate has its own default threshold
         gr.on([ask.click, question.submit], ask_question, [question, model, mode, threshold], [answer, sources])
     return demo
 

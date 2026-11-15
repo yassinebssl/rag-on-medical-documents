@@ -9,6 +9,10 @@ Hybrid mode (bm25 given): the top-20 dense chunks and the top-20 BM25 chunks
 are fused by reciprocal rank fusion and the first 5 are the passages; the
 refusal gate still uses the best dense similarity.
 
+Cross-encoder gate (reranker given): the passages stay the same, but the gate
+compares the cross-encoder's best score over them (rerank.gate_score, 0..1) with
+RERANK_THRESHOLD instead of comparing the dense similarity with the threshold.
+
 Only free OpenRouter models are allowed (model id ends in ':free', or is the
 'openrouter/free' router). This is a project rule, enforced here.
 """
@@ -24,6 +28,7 @@ REFUSAL = "I cannot answer this question from the provided documents."
 TOP_K = 5
 CANDIDATES = 20  # chunks taken from each ranking before fusion in hybrid mode
 SIM_THRESHOLD = 0.6  # the brief's value; calibrate on the eval set before reporting
+RERANK_THRESHOLD = 0.5  # cross-encoder gate: the model's own boundary (logit 0), not tuned on the eval set
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 FREE_MODELS = [
     "nvidia/nemotron-3-ultra-550b-a55b:free",
@@ -172,8 +177,12 @@ def rrf(rankings, k=60):
 
 
 def answer_question(question, embedder, collection, model, api_key, threshold=SIM_THRESHOLD,
-                    bm25=None):
-    """Retrieve (fused with BM25 if given), refuse below the threshold, else generate_answer."""
+                    bm25=None, reranker=None, rerank_threshold=RERANK_THRESHOLD):
+    """Retrieve (fused with BM25 if given), refuse below the gate's threshold, else generate_answer.
+
+    The gate is the best dense similarity against threshold, or, with a reranker,
+    the cross-encoder gate score against rerank_threshold.
+    """
     if bm25 is None:
         hits = retrieve(question, embedder, collection)
         best = hits[0]["similarity"] if hits else 0.0
@@ -181,17 +190,26 @@ def answer_question(question, embedder, collection, model, api_key, threshold=SI
         dense = retrieve(question, embedder, collection, k=CANDIDATES)
         best = dense[0]["similarity"] if dense else 0.0
         hits = rrf([dense, bm25.search(question, CANDIDATES)])[:TOP_K]
-    if best < threshold:
-        res = {"answer": REFUSAL, "refused": True, "reason": "below_threshold", "hits": hits, "cited": []}
+    rerank_score = None
+    if reranker is not None:
+        from rerank import gate_score
+
+        rerank_score = gate_score(question, hits, reranker)
+        refuse, reason = rerank_score < rerank_threshold, "below_rerank_threshold"
+    else:
+        refuse, reason = best < threshold, "below_threshold"
+    if refuse:
+        res = {"answer": REFUSAL, "refused": True, "reason": reason, "hits": hits, "cited": []}
     else:
         res = generate_answer(question, hits, model, api_key)
-    return {**res, "best_similarity": best}
+    return {**res, "best_similarity": best, "rerank_score": rerank_score}
 
 
 def load_context():
-    """Return the embedder, collection, BM25 index and API key; exit with one line if one is missing."""
+    """Return the embedder, collection, BM25 index, gate reranker and API key; exit with one line if one is missing."""
     import index  # imported here so that importing rag stays light
     from bm25 import BM25
+    from rerank import GATE_RERANKER, load_reranker
     from chromadb.errors import NotFoundError
 
     api_key = load_env().get("OPENROUTER_API_KEY")
@@ -205,19 +223,22 @@ def load_context():
     if collection.count() == 0:
         raise SystemExit(empty)
     return {"embedder": index.load_embedder(), "collection": collection,
-            "bm25": BM25(index.all_chunks(collection)), "api_key": api_key}
+            "bm25": BM25(index.all_chunks(collection)), "reranker": load_reranker(GATE_RERANKER),
+            "api_key": api_key}
 
 
-if __name__ == "__main__":  # .venv/bin/python src/rag.py "question" [model] [--hybrid]
+if __name__ == "__main__":  # .venv/bin/python src/rag.py "question" [model] [--hybrid] [--rerank]
     import sys
 
-    args = [a for a in sys.argv[1:] if a != "--hybrid"]
+    args = [a for a in sys.argv[1:] if a not in ("--hybrid", "--rerank")]
     ctx = load_context()
     model = args[1] if len(args) > 1 else load_env().get("OPENROUTER_MODEL") or DEFAULT_MODEL
-    bm25 = ctx["bm25"] if "--hybrid" in sys.argv else None
+    bm25 = ctx["bm25"] if "--hybrid" in sys.argv or "--rerank" in sys.argv else None
+    reranker = ctx["reranker"] if "--rerank" in sys.argv else None
     res = answer_question(args[0], ctx["embedder"], ctx["collection"], model, ctx["api_key"],
-                          bm25=bm25)
-    print(f"reason={res['reason']} best_similarity={res['best_similarity']:.3f}")
+                          bm25=bm25, reranker=reranker)
+    gate = "" if res["rerank_score"] is None else f" rerank_score={res['rerank_score']:.3f}"
+    print(f"reason={res['reason']} best_similarity={res['best_similarity']:.3f}{gate}")
     for h in res["hits"]:
         sim = "-" if h["similarity"] is None else f"{h['similarity']:.3f}"
         print(f"  {sim:>5}  {source_label(h)}")

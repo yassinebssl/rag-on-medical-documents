@@ -32,6 +32,7 @@ This is retrieval-augmented generation, or RAG. A model alone answers from its t
 | `SIM_THRESHOLD` | 0.6 | `src/rag.py` |
 | Fusion constant `k` (Step 10) | 60 | `rrf` in `src/rag.py` |
 | BM25 `k1`, `b` (Step 9) | 1.5, 0.75 | `BM25.__init__` in `src/bm25.py` |
+| `RERANK_THRESHOLD` (Step 11) | 0.5 | `src/rag.py` |
 
 ## Step 0: Set up the project
 
@@ -191,12 +192,16 @@ def retrieve(question, embedder, collection, k=TOP_K):
 
 Retrieval always returns five chunks, even for "Who painted the Mona Lisa?" (question O09). Handed five unrelated passages, a model can still answer from memory, as confidently as from evidence.
 
-The defence is a **similarity gate**: when even the best chunk is far from the question, return the refusal sentence without calling the model. `answer_question` in `src/rag.py` is the whole pipeline. Write it now; the `bm25` branch belongs to Step 10, and `generate_answer` comes in Step 7:
+The defence is a **similarity gate**: when even the best chunk is far from the question, return the refusal sentence without calling the model. `answer_question` in `src/rag.py` is the whole pipeline. Write it now; the `bm25` branch belongs to Step 10, the `reranker` branch to Step 11, and `generate_answer` comes in Step 7:
 
 ```python
 def answer_question(question, embedder, collection, model, api_key, threshold=SIM_THRESHOLD,
-                    bm25=None):
-    """Retrieve (fused with BM25 if given), refuse below the threshold, else generate_answer."""
+                    bm25=None, reranker=None, rerank_threshold=RERANK_THRESHOLD):
+    """Retrieve (fused with BM25 if given), refuse below the gate's threshold, else generate_answer.
+
+    The gate is the best dense similarity against threshold, or, with a reranker,
+    the cross-encoder gate score against rerank_threshold.
+    """
     if bm25 is None:
         hits = retrieve(question, embedder, collection)
         best = hits[0]["similarity"] if hits else 0.0
@@ -204,14 +209,22 @@ def answer_question(question, embedder, collection, model, api_key, threshold=SI
         dense = retrieve(question, embedder, collection, k=CANDIDATES)
         best = dense[0]["similarity"] if dense else 0.0
         hits = rrf([dense, bm25.search(question, CANDIDATES)])[:TOP_K]
-    if best < threshold:
-        res = {"answer": REFUSAL, "refused": True, "reason": "below_threshold", "hits": hits, "cited": []}
+    rerank_score = None
+    if reranker is not None:
+        from rerank import gate_score
+
+        rerank_score = gate_score(question, hits, reranker)
+        refuse, reason = rerank_score < rerank_threshold, "below_rerank_threshold"
+    else:
+        refuse, reason = best < threshold, "below_threshold"
+    if refuse:
+        res = {"answer": REFUSAL, "refused": True, "reason": reason, "hits": hits, "cited": []}
     else:
         res = generate_answer(question, hits, model, api_key)
-    return {**res, "best_similarity": best}
+    return {**res, "best_similarity": best, "rerank_score": rerank_score}
 ```
 
-The refusal is always the same string so that code can test for it: the prompt asks the model for this exact sentence, and `generate_answer` and the `no_rag` baseline look for it in the reply. A similarity of exactly 0.6 passes, because the test is `best < threshold`. The value 0.6 comes from the brief and is not measured; Step 12 calibrates it.
+The refusal is always the same string so that code can test for it: the prompt asks the model for this exact sentence, and `generate_answer` and the `no_rag` baseline look for it in the reply. A similarity of exactly 0.6 passes, because the test is `best < threshold`. The value 0.6 comes from the brief and is not measured; Step 13 calibrates it.
 
 Its test in `tests/test_rag.py` uses a distance of 0.45 (similarity 0.55) and replaces `rag.call_llm` with a function that divides by zero, so it passes only if the model is never called. It needs `call_llm` to exist, so you run it at the end of Step 6.
 
@@ -322,7 +335,7 @@ uncited [3] -> I cannot answer this question from the provided documents.
 model_refused [] -> I cannot answer this question from the provided documents.
 ```
 
-Look at the first reply. It passes, yet neither passage says that paracetamol treats fever. The check confirms that cited numbers exist, not that a passage supports the claim next to it, and it does not require a citation after every claim. Step 12 measures support with a judge model.
+Look at the first reply. It passes, yet neither passage says that paracetamol treats fever. The check confirms that cited numbers exist, not that a passage supports the claim next to it, and it does not require a citation after every claim. Step 13 measures support with a judge model.
 
 ```bash
 .venv/bin/python -m pytest -q tests/test_rag.py -k "format_context or cited_numbers or expand_citations or generate_answer or above_threshold"
@@ -354,7 +367,7 @@ print(res.get("raw", res["answer"]))
 
 Run it first with question A06, which `data/eval/questions.json` marks as answerable: "How long should parenteral artesunate be given to a patient with severe malaria?". Its evidence is on page 14 of `WHO_09_Guidelines_for_the_treatment_of_malaria.pdf`, so look for that file among the passages. The script prints the reason and best similarity, one line per passage, then the raw reply, or the refusal sentence when the model was not called.
 
-Then run it with "What is the first-line topical treatment for scabies?". This is O01, an out-of-corpus question, and its expected outcome is the refusal sentence; if your system answers it, the refusal rate of Step 12 counts that against it. If A06 is refused with `below_threshold`, the threshold is too high for it, which Step 12 measures over all 30 questions.
+Then run it with "What is the first-line topical treatment for scabies?". This is O01, an out-of-corpus question, and its expected outcome is the refusal sentence; if your system answers it, the refusal rate of Step 13 counts that against it. If A06 is refused with `below_threshold`, the threshold is too high for it, which Step 13 measures over all 30 questions.
 
 ## Step 9: Add BM25 keyword search
 
@@ -480,7 +493,7 @@ By hand: D, 4th in dense and 1st in BM25, scores 1/64 + 1/61 = 0.032018; C, 3rd 
 
 In hybrid mode, the `else` branch of `answer_question` (Step 5) fuses 20 chunks (`CANDIDATES`) from each ranking and keeps the first 5. The gate still uses the best dense similarity, because BM25 hits carry no similarity and a BM25 score has no fixed scale to compare with 0.6. A test in `tests/test_rag.py` pins this: BM25 finds the paracetamol chunk, but the dense best is 0.55, so the result is `below_threshold`.
 
-Two parts of `src/rag.py` remain. `load_context` calls `load_env`, `index.open_index` and `index.load_embedder`, and builds BM25 in memory with `BM25(index.all_chunks(collection))`, so both retrievers see the same chunks and no second store needs syncing. If the key or the index is missing, it exits with one line that says what to do. The command-line block replaces your Step 8 script: it calls `load_context`, takes the model from the second argument, else `OPENROUTER_MODEL` in `.env`, else `DEFAULT_MODEL`, and uses BM25 only with `--hybrid`.
+Two parts of `src/rag.py` remain. `load_context` calls `load_env`, `index.open_index` and `index.load_embedder`, builds BM25 in memory with `BM25(index.all_chunks(collection))`, so both retrievers see the same chunks and no second store needs syncing, and loads the gate cross-encoder of Step 11. If the key or the index is missing, it exits with one line that says what to do. The command-line block replaces your Step 8 script: it calls `load_context`, takes the model from the second argument, else `OPENROUTER_MODEL` in `.env`, else `DEFAULT_MODEL`, uses BM25 with `--hybrid` or `--rerank`, and the cross-encoder gate of Step 11 with `--rerank`.
 
 ```bash
 .venv/bin/python -m pytest -q tests/test_rag.py
@@ -489,7 +502,35 @@ Two parts of `src/rag.py` remain. `load_context` calls `load_env`, `index.open_i
 
 The run prints `reason=<reason> best_similarity=<value>`, one line per passage with its similarity and label, then the raw reply or the refusal sentence. A passage that only BM25 found shows `-` for its similarity.
 
-## Step 11: Build the app
+## Step 11: Gate with a cross-encoder
+
+Look at the closest out-of-corpus question in Step 13's set: "How long is a typical course of isotretinoin for severe acne?" (O06). Its best dense similarity is 0.588, only 0.012 under 0.6. BGE-M3 embeds the question and each chunk separately, so cosine similarity measures whether a passage is on the same topic, and a medical question outside the corpus is often on a nearby topic. The gate refuses it, but with almost no room.
+
+A **cross-encoder** reads the question and one passage together, as one input, and returns one score for "does this passage answer this question". It is slower than comparing two stored vectors, so it only scores passages that retrieval already found (Nogueira and Cho, "Passage Re-ranking with BERT", 2019, https://arxiv.org/abs/1901.04085). `src/rerank.py` holds two functions. `rerank` sorts hits by the cross-encoder's score. `gate_score` returns the sigmoid of the best raw score over the hits, a number from 0 to 1 where 0.5 is the model's own boundary between relevant and not relevant:
+
+```python
+def gate_score(question, hits, reranker):
+    # ...
+    if not hits:
+        return 0.0
+    best = max(reranker.predict([(question, h["text"]) for h in hits]))
+    return 1 / (1 + math.exp(-best))
+```
+
+`answer_question` takes an optional `reranker`. With one, the passages stay the same and only the gate changes: it compares `gate_score` with `RERANK_THRESHOLD = 0.5` and refuses with the reason `below_rerank_threshold`. The result also carries `rerank_score` (`None` without a reranker). `load_context` loads the gate model, `cross-encoder/ms-marco-MiniLM-L6-v2` (about 90 MB), and the command line gains `--rerank`.
+
+Which cross-encoder? `src/evaluate.py retrieval` compares three on the 30 questions with no LLM call: the medical `ncbi/MedCPT-Cross-Encoder`, the multilingual `BAAI/bge-reranker-v2-m3` and the small MiniLM. For each it measures the page hit rate and context precision of the passages, and the separation of the gate score: `auroc`, the share of (answerable, out-of-corpus) pairs in which the answerable question scores higher, and `margin`, the lowest answerable score minus the highest out-of-corpus one. On the recorded corpus, scoring the 5 hybrid passages with each model's own 0.5 boundary, only MiniLM answers all 20 answerable questions and refuses all 10 out-of-corpus ones, in 0.8 s per question: O06 gets 0.156, and the lowest answerable question 0.870. MedCPT lets "Who painted the Mona Lisa?" through (0.78), and bge-reranker-v2-m3 the multiple sclerosis question (0.85) and takes about 11 s. Reordering the 20 fused candidates with a cross-encoder did not find the evidence pages more often than the hybrid passages, so the project uses the cross-encoder for the gate only.
+
+Both the dense similarity and the cross-encoder rank every answerable question above every out-of-corpus one (`auroc` 1.0), so 30 questions cannot show that one ranks better. What differs is the threshold: 0.6 was checked on these same questions, and 0.5 was not tuned on them.
+
+```bash
+.venv/bin/python -m pytest -q tests/test_rerank.py tests/test_rag.py -k "rerank or gate"
+.venv/bin/python src/rag.py "How long is a typical course of isotretinoin for severe acne?" --rerank
+```
+
+The run prints `reason=below_rerank_threshold best_similarity=0.588 rerank_score=0.156`, the passages, and the refusal sentence, without calling the model.
+
+## Step 12: Build the app
 
 `src/app.py` puts a Gradio page over `answer_question`. The page shows `DISCLAIMER` under its heading, and every answer ends with it:
 
@@ -498,7 +539,7 @@ DISCLAIMER = ("This tool is a student project. It is not medical advice. Check e
               "Questions are sent to OpenRouter: do not type anything that identifies a patient.")
 ```
 
-`respond` in `src/app.py` calls `answer_question`, passing BM25 only in Hybrid mode. It turns an empty question into `Type a question first.` and a failed model call into `The model call failed: ...` instead of a crash, since, as the README warns, a free model's call can fail or return an empty reply. `format_result` appends the disclaimer and, for a refusal, a reason such as `Best similarity 0.41 is below the threshold.` It also returns one table row per passage, with `yes` in the Cited column for each cited passage. In `build_app`, the model menu offers only `FREE_MODELS`, the retrieval choice defaults to Hybrid, and a threshold slider runs from 0.0 to 1.0 in steps of 0.05, starting at `SIM_THRESHOLD`.
+`respond` in `src/app.py` calls `answer_question`, passing BM25 in the two hybrid modes and the cross-encoder only in the gate mode; the slider value goes to whichever gate the mode uses. It turns an empty question into `Type a question first.` and a failed model call into `The model call failed: ...` instead of a crash, since, as the README warns, a free model's call can fail or return an empty reply. `format_result` appends the disclaimer and, for a refusal, a reason such as `Best similarity 0.41 is below the threshold.` or `The cross-encoder rates the best passage 0.16, below the threshold.` It also returns one table row per passage, with `yes` in the Cited column for each cited passage. In `build_app`, the model menu offers only `FREE_MODELS`, the retrieval choice defaults to "Hybrid + cross-encoder gate", and a threshold slider runs from 0.0 to 1.0 in steps of 0.05; `MODES` gives each choice its default threshold (`SIM_THRESHOLD` or `RERANK_THRESHOLD`), and changing the choice moves the slider to it.
 
 ```bash
 .venv/bin/python -m pytest -q tests/test_app.py
@@ -507,13 +548,13 @@ DISCLAIMER = ("This tool is a student project. It is not medical advice. Check e
 
 Before you launch it, remember the disclaimer: not medical advice, every question goes to OpenRouter with the passages, free models only. Then open http://127.0.0.1:7860. Its three example questions are A06, A09 and the scabies question O01, which should be refused.
 
-## Step 12: Evaluate
+## Step 13: Evaluate
 
 A few good-looking answers say nothing about the questions you did not ask, so `src/evaluate.py` measures. The project has not yet run its evaluation on the real corpus: this tutorial quotes no results, and every example here uses toy inputs.
 
 **The question set**, `data/eval/questions.json`, holds 20 answerable questions (A01 to A20, each with a ground-truth answer, source, page and evidence quote) and 10 out-of-corpus ones that must be refused (O01 to O10: seven medical, three general knowledge).
 
-**Four systems** run with each chosen model: `rag_dense` (Steps 4 to 7), `rag_hybrid` (with Step 10), and the two baselines the course requires, `bm25_rag` (the 5 best BM25 passages, same prompt and citation check, no gate) and `no_rag` (the model alone, counted as a refusal only if it says the refusal sentence). The `no_rag` prompt states that no documents are given and asks for an answer from the model's own knowledge: the refusal sentence names "the provided documents", and without that statement the model refused every question because it saw none.
+**Five systems** run with each chosen model: `rag_dense` (Steps 4 to 7), `rag_hybrid` (with Step 10), `rag_rerank` (with Step 11), and the two baselines the course requires, `bm25_rag` (the 5 best BM25 passages, same prompt and citation check, no gate) and `no_rag` (the model alone, counted as a refusal only if it says the refusal sentence). The `no_rag` prompt states that no documents are given and asks for an answer from the model's own knowledge: the refusal sentence names "the provided documents", and without that statement the model refused every question because it saw none.
 
 **Metrics**, one row per system and model in `results/summary.csv`. `answer_rate` is the share of answerable questions not refused, and `refusal_rate` the share of out-of-corpus questions refused; you need both, because a system that refuses everything scores 1.0 on the second and 0 on the first. `hit_rate` is the share of answerable questions with a passage from the expected source. `n`, `n_judged` and `mean_latency_s` count the records, the judged records and the mean seconds per answer.
 
@@ -591,7 +632,7 @@ Run the whole suite:
 
 The real pipeline runs `scripts/fetch_corpus.py --from-manifest`, `scripts/check_eval_set.py`, `src/index.py`, `src/evaluate.py sweep`, `src/evaluate.py run --judge`, then `src/app.py`.
 
-Each defence has a limit. The gate is one number: too high and it refuses answerable questions, too low and it lets weakly related passages through. The citation check proves that cited numbers exist, not that passages support the claims. The marker rewrite misses range markers. The judge is a model too. `check_eval_set.py` checks 20 quotes, not whole documents. And the corpus is a 50-document snapshot of guidelines that go out of date.
+Each defence has a limit. Each gate is one number, and the cross-encoder was trained on web search, not medicine: too high and it refuses answerable questions, too low and it lets weakly related passages through. The citation check proves that cited numbers exist, not that passages support the claims. The marker rewrite misses range markers. The judge is a model too. `check_eval_set.py` checks 20 quotes, not whole documents. And the corpus is a 50-document snapshot of guidelines that go out of date.
 
 The three rules still hold: not medical advice, nothing that identifies a patient (and `results/records.jsonl` stores every evaluation question and answer), free models only.
 
@@ -600,6 +641,7 @@ The three rules still hold: not medical advice, nothing that identifies a patien
 - BM25, built following two build-your-own-x tutorials (list at https://github.com/codecrafters-io/build-your-own-x): https://stevenloria.com/tf-idf/ (term and document frequencies, idf) and https://boyter.org/2010/08/build-vector-space-search-engine-python/ (tokenize, index, rank).
 - Robertson and Zaragoza, "The Probabilistic Relevance Framework: BM25 and Beyond", 2009.
 - Cormack, Clarke and Buettcher, "Reciprocal Rank Fusion outperforms Condorcet and individual rank learning methods", SIGIR 2009, https://doi.org/10.1145/1571941.1572114
+- Nogueira and Cho, "Passage Re-ranking with BERT", 2019, https://arxiv.org/abs/1901.04085, and https://huggingface.co/cross-encoder/ms-marco-MiniLM-L6-v2
 - Es et al., "RAGAS: Automated Evaluation of Retrieval Augmented Generation", 2023, https://arxiv.org/abs/2309.15217, and https://docs.ragas.io/en/stable/concepts/metrics/available_metrics/context_precision/
 
 Tools used: Claude (Anthropic) was used to write the project's code and documentation, including this tutorial.

@@ -28,17 +28,27 @@ def test_respond_with_an_empty_question_does_not_call_the_pipeline(monkeypatch):
     md, table = app.respond("   ", rag.DEFAULT_MODEL, "Dense", 0.6, {})
     assert md == "Type a question first." and table == []
 
-def test_respond_passes_bm25_only_in_hybrid_mode(monkeypatch):
+def test_respond_passes_bm25_in_both_hybrid_modes_and_the_reranker_only_with_the_gate(monkeypatch):
     calls = []
-    def fake(question, embedder, collection, model, api_key, threshold, bm25):
-        """Record the bm25 argument and refuse."""
-        calls.append(bm25)
-        return {"answer": rag.REFUSAL, "refused": True, "reason": "model_refused", "hits": [], "cited": [], "best_similarity": 0.7}
+    def fake(question, embedder, collection, model, api_key, threshold, bm25, reranker, rerank_threshold):
+        """Record the bm25, reranker and threshold arguments and refuse."""
+        calls.append((bm25, reranker, threshold, rerank_threshold))
+        return {"answer": rag.REFUSAL, "refused": True, "reason": "model_refused", "hits": [], "cited": [],
+                "best_similarity": 0.7, "rerank_score": None}
     monkeypatch.setattr(rag, "answer_question", fake)
-    ctx = {"embedder": None, "collection": None, "bm25": "BM25", "api_key": "k"}
-    app.respond("q?", rag.DEFAULT_MODEL, "Dense", 0.6, ctx)
-    app.respond("q?", rag.DEFAULT_MODEL, "Hybrid (dense + BM25)", 0.6, ctx)
-    assert calls == [None, "BM25"]
+    ctx = {"embedder": None, "collection": None, "bm25": "BM25", "reranker": "CE", "api_key": "k"}
+    for mode in (app.DENSE, app.HYBRID, app.RERANKED):
+        app.respond("q?", rag.DEFAULT_MODEL, mode, 0.55, ctx)
+    assert calls == [(None, None, 0.55, 0.55), ("BM25", None, 0.55, 0.55), ("BM25", "CE", 0.55, 0.55)]
+
+def test_format_result_for_a_cross_encoder_refusal_gives_its_score():
+    md, _ = app.format_result({"answer": rag.REFUSAL, "refused": True, "reason": "below_rerank_threshold",
+                               "hits": HITS, "cited": [], "best_similarity": 0.7, "rerank_score": 0.123})
+    assert "0.12" in md and "cross-encoder" in md.lower()
+
+def test_the_app_defaults_to_the_cross_encoder_gate_and_its_threshold():
+    assert app.MODES[app.DEFAULT_MODE] == rag.RERANK_THRESHOLD and app.DEFAULT_MODE == app.RERANKED
+    assert app.MODES[app.DENSE] == app.MODES[app.HYBRID] == rag.SIM_THRESHOLD
 
 def test_respond_reports_an_llm_error_instead_of_raising(monkeypatch):
     def boom(*a, **k):

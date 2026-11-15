@@ -1,6 +1,7 @@
 """Tests for numbered citations, the refusal gate, retrieval and call_llm (no network)."""
 import io
 import json
+import math
 import urllib.error
 
 import pytest
@@ -228,3 +229,28 @@ def test_hybrid_answer_question_refuses_below_threshold_even_when_bm25_matches(m
                               threshold=0.6, bm25=bm25)
     assert (res["refused"], res["reason"], res["answer"]) == (True, "below_threshold", rag.REFUSAL)
     assert abs(res["best_similarity"] - 0.55) < 1e-9
+
+
+def test_reranker_gate_refuses_a_low_cross_encoder_score_even_when_similarity_is_high(monkeypatch):
+    from conftest import FakeReranker
+    monkeypatch.setattr(rag, "call_llm", lambda *a, **k: 1 / 0)
+    res = rag.answer_question("q", FakeEmbedder(), FakeCollection(rows(0.1)), rag.DEFAULT_MODEL, "k",
+                              reranker=FakeReranker([-2.0, -3.0]))
+    assert (res["refused"], res["reason"], res["answer"]) == (True, "below_rerank_threshold", rag.REFUSAL)
+    assert abs(res["best_similarity"] - 0.9) < 1e-9 and abs(res["rerank_score"] - 1 / (1 + math.exp(2.0))) < 1e-9
+
+
+def test_reranker_gate_answers_a_high_cross_encoder_score_even_when_similarity_is_low(monkeypatch):
+    from conftest import FakeReranker
+    monkeypatch.setattr(rag, "call_llm", lambda *a, **k: "Twice daily [1].")
+    res = rag.answer_question("q", FakeEmbedder(), FakeCollection(rows(0.45)), rag.DEFAULT_MODEL, "k",
+                              reranker=FakeReranker([-1.0, 2.0]))
+    assert (res["refused"], res["reason"]) == (False, "answered")
+    assert [h["id"] for h in res["hits"]] == ["a", "b"]          # passages keep the retrieval order
+    assert abs(res["rerank_score"] - 1 / (1 + math.exp(-2.0))) < 1e-9
+
+
+def test_answer_question_without_a_reranker_has_no_rerank_score(monkeypatch):
+    monkeypatch.setattr(rag, "call_llm", lambda *a, **k: "Twice daily [1].")
+    res = rag.answer_question("q", FakeEmbedder(), FakeCollection(rows(0.1)), rag.DEFAULT_MODEL, "k")
+    assert res["rerank_score"] is None

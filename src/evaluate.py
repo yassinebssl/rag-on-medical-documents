@@ -3,6 +3,7 @@
 Systems:
 - rag_dense: rag.answer_question (BGE-M3 retrieval, similarity gate, cited answer)
 - rag_hybrid: the same with BM25 fused in by reciprocal rank fusion
+- rag_rerank: rag_hybrid with the cross-encoder refusal gate (rag.RERANK_THRESHOLD)
 - bm25_rag: BM25 passages only, then rag.generate_answer, with no similarity gate
 - no_rag: the LLM alone, with no passages (refuses only if the model says the refusal sentence)
 
@@ -35,7 +36,7 @@ import time
 
 import rag
 
-SYSTEMS = ("rag_dense", "rag_hybrid", "bm25_rag", "no_rag")
+SYSTEMS = ("rag_dense", "rag_hybrid", "rag_rerank", "bm25_rag", "no_rag")
 QUESTIONS = os.path.join(rag.ROOT, "data", "eval", "questions.json")
 RESULTS = os.path.join(rag.ROOT, "results")
 THRESHOLDS = [round(0.30 + 0.05 * i, 2) for i in range(11)]  # 0.30, 0.35, ..., 0.80
@@ -64,13 +65,16 @@ Answer:
 def run_system(system, question, ctx, model, api_key, threshold):
     """Answer one question with one system; return the keys of rag.answer_question.
 
-    ctx holds the shared retrieval objects: embedder, collection and bm25.
+    ctx holds the shared retrieval objects: embedder, collection, bm25 and reranker.
     """
     if system == "rag_dense":
         return rag.answer_question(question, ctx["embedder"], ctx["collection"], model, api_key, threshold)
     if system == "rag_hybrid":
         return rag.answer_question(question, ctx["embedder"], ctx["collection"], model, api_key, threshold,
                                    bm25=ctx["bm25"])
+    if system == "rag_rerank":
+        return rag.answer_question(question, ctx["embedder"], ctx["collection"], model, api_key, threshold,
+                                   bm25=ctx["bm25"], reranker=ctx["reranker"])
     if system == "bm25_rag":
         hits = ctx["bm25"].search(question, rag.TOP_K)
         return {**rag.generate_answer(question, hits, model, api_key), "best_similarity": None}
@@ -167,6 +171,7 @@ def run_questions(questions, systems, models, ctx, api_key, threshold, judge, ou
                 record = {"system": system, "model": model, "id": q["id"], "answerable": q["answerable"],
                           "question": q["question"], "answer": res["answer"], "refused": res["refused"],
                           "reason": res["reason"], "best_similarity": res["best_similarity"],
+                          "rerank_score": res.get("rerank_score"),
                           "latency_s": round(latency, 2), "sources": [rag.source_label(h) for h in res["hits"]],
                           "relevant": [h["source"] == q["source"] for h in res["hits"]],
                           "faithfulness": faith, "threshold": threshold}
@@ -226,6 +231,61 @@ def best_threshold(rows):
     return max(rows, key=lambda row: (row["balanced"], row["threshold"]))["threshold"]
 
 
+def separation(points):
+    """How well the best retrieval score separates answerable from out-of-corpus questions.
+
+    points: (best score, answerable) per question. auroc is the share of (answerable,
+    out-of-corpus) pairs in which the answerable question scores higher, ties counting
+    half; it does not depend on a threshold or on the score's scale. margin is the
+    lowest answerable score minus the highest out-of-corpus one: positive when one
+    threshold refuses every out-of-corpus question and answers every answerable one.
+    gap_share is the margin as a share of the score range: it removes a linear change
+    of scale, not a non-linear one (a sigmoid changes it), so it compares retrievers
+    that share a kind of score, not cosine similarities with cross-encoder logits.
+    """
+    pos = [s for s, answerable in points if answerable]
+    neg = [s for s, answerable in points if not answerable]
+    pairs = [(p > n) + 0.5 * (p == n) for p in pos for n in neg]
+    margin = min(pos) - max(neg)
+    spread = max(pos + neg) - min(pos + neg)
+    return {"auroc": round(sum(pairs) / len(pairs), 3), "margin": round(margin, 4),
+            "gap_share": round(margin / spread, 3) if spread else 0.0}
+
+
+def evaluate_retrieval(questions, retrievers):
+    """Run every retriever on every question, with no LLM call.
+
+    retrievers maps a name to a function question -> (top-k hits, best score), the
+    score the refusal gate would compare with its threshold. Returns one metrics row
+    per retriever (hit rate and page hit rate on answerable questions, context
+    precision, the separation of the best scores, mean latency) and one row per
+    question with each retriever's best score and whether it found the evidence page.
+    A PubMed article has no page, so finding the article counts as finding the page.
+    """
+    rows = []
+    per_question = [{"id": q["id"], "answerable": q["answerable"]} for q in questions]
+    for name, retriever in retrievers.items():
+        points, hit, page_hit, precision, seconds = [], [], [], [], []
+        for q, row in zip(questions, per_question):
+            t0 = time.time()
+            hits, best = retriever(q["question"])
+            seconds.append(time.time() - t0)
+            points.append((best, q["answerable"]))
+            row[f"{name}_best"] = round(best, 4)
+            row[f"{name}_page_hit"] = ""
+            if q["answerable"]:
+                relevant = [h["source"] == q["source"] for h in hits]
+                on_page = any(h["source"] == q["source"] and h["page"] == q["page"] for h in hits)
+                hit.append(any(relevant))
+                page_hit.append(on_page)
+                precision.append(average_precision(relevant))
+                row[f"{name}_page_hit"] = on_page
+        rows.append({"retriever": name, "hit_rate": mean(hit), "page_hit_rate": mean(page_hit),
+                     "context_precision": mean(precision), **separation(points),
+                     "mean_latency_ms": round(1000 * sum(seconds) / len(seconds))})
+    return rows, per_question
+
+
 def write_csv(path, rows):
     """Write a non-empty list of dicts as CSV, with the keys of the first row as header."""
     with open(path, "w", newline="", encoding="utf-8") as fh:
@@ -282,6 +342,65 @@ def sweep():
     print(f"best threshold: {best_threshold(rows):.2f}")
 
 
+def retrieval(names):
+    """Compare the retrievers on the eval set with no LLM call; save and print the table.
+
+    dense, bm25 and hybrid return the passages the systems use (hybrid gates on the best
+    dense similarity, as rag.answer_question does). hybrid+<name> reranks the first
+    rag.CANDIDATES fused hybrid hits with the cross-encoder <name> and gates on its top
+    score. hybrid+<name>_gate keeps the hybrid passages and gates on the cross-encoder's
+    best raw score over them, which is what rag_rerank does with the gate reranker.
+    Writes results/retrieval.csv and results/retrieval_questions.csv.
+    """
+    from rerank import load_reranker, rerank
+
+    ctx = rag.load_context()
+    embedder, collection, bm25 = ctx["embedder"], ctx["collection"], ctx["bm25"]
+
+    def fused(question):
+        """Return the top dense hits and the first rag.CANDIDATES hits of the hybrid fusion."""
+        dense_hits = rag.retrieve(question, embedder, collection, k=rag.CANDIDATES)
+        return dense_hits, rag.rrf([dense_hits, bm25.search(question, rag.CANDIDATES)])[:rag.CANDIDATES]
+
+    def dense(question):
+        """Dense top-k, gated on the best similarity."""
+        hits = rag.retrieve(question, embedder, collection)
+        return hits, hits[0]["similarity"]
+
+    def sparse(question):
+        """BM25 top-k, gated on the best BM25 score (0 when no term matches)."""
+        hits = bm25.search(question, rag.TOP_K)
+        return hits, hits[0]["bm25"] if hits else 0.0
+
+    def hybrid(question):
+        """Fused top-k, gated on the best dense similarity."""
+        dense_hits, hits = fused(question)
+        return hits[:rag.TOP_K], dense_hits[0]["similarity"]
+
+    retrievers = {"dense": dense, "bm25": sparse, "hybrid": hybrid}
+    for name in names:
+        model = load_reranker(name)
+
+        def reranked(question, model=model):
+            """Fused candidates reranked by the cross-encoder, gated on its top score."""
+            hits = rerank(question, fused(question)[1], model, rag.TOP_K)
+            return hits, hits[0]["rerank"]
+
+        def gated(question, model=model):
+            """Hybrid passages unchanged, gated on the cross-encoder's best raw score over them."""
+            hits = fused(question)[1][:rag.TOP_K]
+            return hits, rerank(question, hits, model, rag.TOP_K)[0]["rerank"]
+
+        retrievers[f"hybrid+{name}"] = reranked
+        retrievers[f"hybrid+{name}_gate"] = gated
+    rows, per_question = evaluate_retrieval(load_questions(), retrievers)
+    os.makedirs(RESULTS, exist_ok=True)
+    write_csv(os.path.join(RESULTS, "retrieval.csv"), rows)
+    write_csv(os.path.join(RESULTS, "retrieval_questions.csv"), per_question)
+    for row in rows:
+        print(row)
+
+
 def run(systems, models, judge, limit):
     """Run the systems on the questions, then write the summary and the human rating sheet.
 
@@ -319,9 +438,20 @@ def main():
     run_parser.add_argument("--models", help="comma-separated, or 'all' for rag.FREE_MODELS")
     run_parser.add_argument("--judge", action="store_true", help="score faithfulness with a judge LLM")
     run_parser.add_argument("--limit", type=int, help="keep the first N questions")
+    retrieval_parser = sub.add_parser("retrieval", help="compare the retrievers and rerankers, no LLM call")
+    retrieval_parser.add_argument("--rerankers", default="medcpt,bge,minilm", help="comma-separated, default all three")
     args = parser.parse_args()
     if args.command == "sweep":
         sweep()
+        return
+    if args.command == "retrieval":
+        from rerank import RERANKERS
+
+        names = args.rerankers.split(",")
+        unknown = [n for n in names if n not in RERANKERS]
+        if unknown:
+            parser.error(f"unknown reranker(s) {', '.join(unknown)}; choose from {', '.join(RERANKERS)}")
+        retrieval(names)
         return
     systems = args.systems.split(",")
     unknown = [s for s in systems if s not in SYSTEMS]
