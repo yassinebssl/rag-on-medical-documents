@@ -1,0 +1,60 @@
+\section{Dataset}
+\label{sec:dataset}
+
+\subsection{Corpus}
+
+The corpus has 50 documents (Table~\ref{tab:corpus}). Twenty are WHO guidelines downloaded as PDF files from WHO IRIS, the WHO institutional repository \citep{whoiris}. Thirty are open-access articles from PubMed Central \citep{pmcoa}, whose full text we took from the Europe PMC API \citep{europepmc2015} and stored as plain text, because Europe PMC refuses scripted downloads of article PDFs (HTTP 403) while its full-text XML is reliable. \code{scripts/fetch_corpus.py} searched both sources by topic and kept only real PDFs of at most 15~MB and article bodies of at least 2,000 characters.
+
+The WHO documents cover hypertension, sodium intake, diabetes and dyslipidaemia in diabetes, malaria, tuberculosis, HIV and antenatal care. Some are clinical guidelines; others, returned by the same topic search, are about costing, surveillance or mortality measurement. The PubMed articles are about the treatment of hypertension and pulmonary arterial hypertension, the management of type 2 diabetes, and paracetamol dosing. The full list, with the source URL and size of each file, is in \code{docs/dataset_links.md}, generated from \code{data/raw/manifest.json}.
+
+\begin{table}[htbp]
+\centering
+\caption{The corpus. The documents are not in the repository; \code{data/raw/manifest.json} records the URL of each, and \code{fetch_corpus.py --from-manifest} downloads the same files again.}
+\label{tab:corpus}
+\small
+\begin{tabularx}{\linewidth}{@{}lrlX@{}}
+\toprule
+Source & Docs & Format & Unit of loading and citation label \\
+\midrule
+WHO IRIS guidelines & 20 & PDF & one record per page with more than 50 characters; cited as \emph{file, p.~N} \\
+PubMed Central OA articles & 30 & text from Europe PMC XML & one record per article; cited by article title (no page) \\
+\midrule
+Total & 50 & & 1,530 records, 1,500 of them WHO pages \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+Two WHO files were replaced: a scan with no text layer (10 pages, 0 characters), by the WHO antenatal care recommendations (172 pages), and a one-page summary, by the WHO sodium guideline (56 pages). Two WHO PDFs are encrypted and need the \code{cryptography} package. On the recorded corpus, \code{load_documents} returned 1,530 records, 1,500 of them WHO pages (2026-11-14). The number of chunks produced by the chunking of Section~\ref{sec:ingest} is 3,410 (counted in the Chroma collection on 2026-11-15). This is above the 2,000 chunks the brief names as a maximum: the 172-page antenatal care guideline and the other long WHO files alone give more than 2,000 windows of 512 tokens. \TODO{justify keeping all 3,410 chunks, or agree with the instructor that the cap does not apply}.
+
+\paragraph{Licences.} WHO guidelines are free to download, and PubMed Central open-access articles carry licences that allow reuse, each its own. The repository holds only the manifest and links, not the documents. \TODO{check the licence of each PubMed article in the manifest before the hand-in, and list any that does not allow text mining}
+
+\paragraph{MedQA.} We did not use MedQA \citep{jin2021medqa}, which the brief suggests: its exam vignettes are mostly outside our 50 documents, and we wanted a verbatim evidence quote for every answerable question. We wrote the questions ourselves.
+
+\subsection{Construction of the evaluation set}
+\label{sec:evalset}
+
+The question set, \code{data/eval/questions.json}, has 40 questions in three groups with different roles (Table~\ref{tab:evalset}).
+
+\begin{table}[htbp]
+\centering
+\caption{The 40 evaluation questions. Only the answerable group has labels; the other two must be refused. The out-of-corpus group was used to choose the refusal gates; the held-out group was not used for any choice.}
+\label{tab:evalset}
+\small
+\begin{tabularx}{\linewidth}{@{}llrX@{}}
+\toprule
+Group & IDs & Count & Content and role \\
+\midrule
+Answerable & A01--A20 & 20 & One specific fact a clinician might look up (a dose, a threshold, a duration, a regimen). 12 from WHO guidelines, 8 from PubMed articles. Each has a ground-truth answer, its source document, its page (WHO), and a verbatim evidence quote. \\
+Out-of-corpus & O01--O10 & 10 & Seven medical questions on topics absent from the corpus (scabies, coeliac disease, Parkinson's disease, multiple sclerosis, ADHD, acne, ulcerative colitis) and three general-knowledge questions. Used for the threshold sweep and the choice of the cross-encoder. \\
+Held-out near-domain & N01--N10 & 10 & Questions on topics the corpus covers that ask for a fact it does not contain. Written and committed before any run on them; used for no choice. \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\paragraph{Answerable questions (A01--A20).} Each question was written from a passage of the corpus, and its evidence quote is copied from it. \code{scripts/check_eval_set.py} looks for each quote on its recorded page (ignoring case and whitespace) and found 20 of 20. The quotes come from 19 of the 50 documents (two questions share the malaria guideline), 8 of them PubMed articles. A13 is the brief's own example, the adult dose of paracetamol. No WHO guideline in the corpus states it, so its evidence comes from a PubMed article on dosing errors.
+
+\paragraph{Out-of-corpus questions (O01--O10).} A text search of the corpus checked that the key terms of the seven medical questions are absent or never answered; the three general-knowledge questions test the trivial case. These ten are not a clean test: we used them to calibrate the similarity threshold (Section~\ref{sec:sweep}) and to choose the cross-encoder (Section~\ref{sec:retrieval-results}), so results on them are optimistic.
+
+\paragraph{Held-out near-domain questions (N01--N10).} On the original 30 questions, both gates make the same decision on every question, so they cannot be told apart, and the out-of-corpus questions are far from the corpus. We therefore wrote ten harder questions, each on a topic the corpus covers but asking for a fact it does not contain: a mechanism of action, a contraindication, a withdrawn drug, a named trial, a vaccine schedule, a diagnostic cut-off, a genetic test, two doses, and an enzyme. They were written with keyword searches of the corpus text only. No retrieval score, gate score or model answer was looked at, and they were committed (commit \code{48739a1}) before any system was run on them. Neither threshold was chosen or changed with them. Like the out-of-corpus questions, they have no ground truth and must be refused.
+
+A keyword search is a weak guarantee: a fact stated in other words would make a refusal count as correct while it is a missed answer (Section~\ref{sec:errors}).

@@ -1,0 +1,40 @@
+\section{Discussion}
+\label{sec:discussion}
+
+\subsection{What the results support}
+
+The retrieval comparison supports two choices: fusing BM25 with dense retrieval found the expected document for every answerable question, and a small cross-encoder at its untuned boundary separated the original questions with a wide gap, where the cosine threshold kept a margin of 0.036. The first evaluation day adds a less expected point: on near-domain questions neither gate is enough, and the model's own refusal, the defence we control least, did the most work.
+
+The results do not yet support a claim that the system answers correctly more often than the baselines: that needs the human ratings and the baseline rows (Section~\ref{sec:results}).
+
+\subsection{Limits}
+
+\begin{itemize}
+\item \textbf{Few questions.} One question moves an answer rate by 0.05 and a refusal rate by 0.10; we report no confidence interval. The cosine threshold and the cross-encoder were chosen on the out-of-corpus questions; only the ten held-out questions are free of this.
+\item \textbf{Coarse labels, shallow check.} Relevance is per document, and the citation check verifies that numbers exist, not that a passage supports its claim.
+\item \textbf{The judge is the generator.} Models tend to favour their own outputs \citep{zheng2023judge}, so the faithfulness of 1.0 over 19 answers, and any model comparison on it, should be read with care.
+\item \textbf{Free hosted models} are rate-limited, slow (up to 26 seconds), not deterministic, and can change without notice.
+\item \textbf{One number per gate.} Too high refuses answerable questions, too low lets weak passages through; the cross-encoder was trained on web search \citep{bajaj2016msmarco}, not medicine.
+\end{itemize}
+
+\subsection{Bias}
+
+\paragraph{Corpus selection.} The corpus came from keyword searches, not from a clinical review of what users need. It covers eight topic areas, and some of its WHO documents answer no clinical question. A question on a common condition outside these areas, such as asthma, is refused: intended, but the system serves some patients' questions and not others.
+
+\paragraph{Geography and authority.} The articles come from many countries (India, Nigeria, Iraq, Saudi Arabia, France, Australia, among others). Recommendations differ between bodies, as the baseline's answers show (Section~\ref{sec:errors}); the system does not say whose recommendation applies, and cites a guideline and a single study the same way.
+
+\paragraph{Language.} The corpus and questions are in English; BGE-M3 is multilingual, but we did not test other languages.
+
+\paragraph{Evaluation bias.} We wrote the answerable questions from passages, in their words, which favours keyword retrieval and probably overstates retrieval quality for real users.
+
+\subsection{Ethics and medical responsibility}
+
+The system is not a medical device. Its answers can be wrong, outdated or incomplete, and a wrong dose can harm a patient. Four measures reduce the risk: a disclaimer on the page and on every answer; a prompt that forbids diagnosis and asks that doses be quoted with a reminder to check with a clinician (the answer to A04 ends with one); a fixed refusal sentence instead of a guess; and visible sources that a clinician can check. They do not remove the risk, and a refusal can also harm if the user turns to a worse source. The decision stays with the clinician; the system is a search aid over fixed documents, not an adviser.
+
+\subsection{Privacy}
+
+The corpus holds no patient data; the risk is in the questions, which are sent with their passages to OpenRouter and the model provider. The app warns users not to type anything that identifies a patient. The evaluation stores questions and answers in \code{results/records.jsonl}; the reply cache stores neither prompt nor API key, and the key stays in a git-ignored \code{.env}. Real use would need a local model or a provider under a data processing agreement, and a retention policy.
+
+\subsection{Stale guidelines}
+
+The corpus is a snapshot downloaded in November 2026, and the system has no notion of date: it cites an old guideline as readily as a new one, and ``the latest'' guideline (A18) means whatever the corpus holds. RAG makes updating easier than retraining, but someone has to do it. A maintained version would store and show each document's date, prefer the newest edition, and re-run the evidence check after each update.

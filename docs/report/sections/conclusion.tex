@@ -1,0 +1,15 @@
+\section{Conclusion and perspectives}
+\label{sec:conclusion}
+
+We built a question answering system over 20 WHO guidelines and 30 PubMed Central articles that either answers with numbered citations checked in code or refuses with one fixed sentence. It retrieves with BGE-M3 fused with a from-scratch BM25, gates with a small cross-encoder at its untuned boundary, and runs on free models within a quota of 50 requests a day. With no model call, the cross-encoder gate answered all 20 answerable questions and refused all 10 out-of-corpus ones with a wide gap. On the first evaluation day, the gated systems refused all out-of-corpus and all held-out questions; on the held-out questions, the gates stopped only half to seven tenths of them, and the model's own refusal caught the rest. The full comparison with the two baselines, the second model and the human ratings is pending. \TODO{one sentence with the final headline numbers of \code{rag_rerank} against \code{no_rag} and \code{bm25_rag}}
+
+The main lesson is that refusal in a medical RAG system cannot rest on a relevance score alone. A passage can be on the exact topic of a question and still lack the answer, and both a cosine similarity and a cross-encoder trained on web search rate such a passage high.
+
+\paragraph{Perspectives.}
+\begin{itemize}
+\item Finish the evaluation and the human ratings, and compare the systems on correctness, not only on refusal.
+\item Check that each cited passage entails its claim (for example with a natural language inference model), and require a citation after every claim.
+\item A gate that decides whether a passage contains the requested value, measured on a larger held-out near-domain set.
+\item Per-passage relevance labels; PubMed citations by section or quoted sentence; document dates shown in citations.
+\item Multi-query retrieval, and a local model to remove the privacy risk.
+\end{itemize}

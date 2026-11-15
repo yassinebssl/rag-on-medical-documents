@@ -1,0 +1,15 @@
+\begin{table}[htbp]
+\centering
+\caption{Evaluation of each system and model (from \texttt{results/summary.csv}). \texttt{no\_rag} and \texttt{bm25\_rag} are the baselines. Answer: share of the answerable questions A01--A20 not refused. Ref.~O: share of the out-of-corpus questions O01--O10 refused. Ref.~N: share of the held-out questions N01--N10 refused. Hit: share of answerable questions with a passage from the expected source. CP: context precision. Faith.: faithfulness, with the number of judged answers in brackets. Lat.: mean seconds per answer. -- means no value.}
+\label{tab:summary}
+\resizebox{\linewidth}{!}{%
+\begin{tabular}{lllrrrrrrrr}
+\toprule
+Role & System & Model & n & Answer & Ref. O & Ref. N & Hit & CP & Faith. & Lat. (s) \\
+\midrule
+baseline & \texttt{no\_rag} & nvidia/nemotron-3-ultra-550b-a55b:free & 6 & 1.0 & -- & -- & -- & -- & -- & 9.31 \\
+RAG & \texttt{rag\_hybrid} & nvidia/nemotron-3-ultra-550b-a55b:free & 40 & 0.95 & 1.0 & 1.0 & 1.0 & 0.911 & 1.0 (19) & 5.18 \\
+RAG & \texttt{rag\_rerank} & nvidia/nemotron-3-ultra-550b-a55b:free & 39 & 1.0 & 1.0 & 1.0 & 1.0 & 0.906 & 1.0 (19) & 6.03 \\
+\bottomrule
+\end{tabular}}
+\end{table}

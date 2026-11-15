@@ -1,0 +1,70 @@
+\section{Results}
+\label{sec:results}
+
+The retrieval comparison and the threshold sweep make no model call and are complete. The end-to-end evaluation was about one third done when this version was written.
+
+\subsection{Retrieval and gate comparison}
+\label{sec:retrieval-results}
+
+\input{generated/retrieval_table}
+
+In Table~\ref{tab:retrieval}, hit rate, page hit rate (the evidence page is among the 5 passages) and context precision are measured on the 20 answerable questions. The last columns measure how well a gate's score separates answerable from out-of-corpus questions: \emph{auroc} is the share of (answerable, out-of-corpus) pairs in which the answerable one scores higher; \emph{margin} is the lowest answerable score minus the highest out-of-corpus score, positive when one threshold separates them all.
+
+\paragraph{Passages.} The hybrid passages find the expected document for every answerable question (hit rate 1.0) and the evidence page for 18 of 20 (page hit rate 0.90), against 0.95 and 0.80 for dense retrieval alone. BM25 alone does better still on these questions: page hit rate 0.95 and context precision 0.932. A likely reason is that the answerable questions were written from passages of the corpus, so they often share their words, which favours a keyword ranking. For example, BM25 finds the evidence page of A07 (the single dose of primaquine) where dense retrieval does not (\code{results/retrieval_questions.csv}). Reordering the fused candidates with a cross-encoder did not pay off: MedCPT found fewer evidence pages (0.80), MiniLM as many (0.90), and bge-reranker-v2-m3 one more (0.95) at about 46 seconds per question on our CPU. So the cross-encoder only gates.
+
+\paragraph{Gate scores.} The dense similarity ranks every answerable question above every out-of-corpus one (auroc 1.0), but the margin is small: 0.0357, between A04 (0.6235, the lowest answerable) and O06 (0.5878, the highest out-of-corpus). The BM25 score cannot gate (auroc 0.945, negative margin): it grows with the number and rarity of the question's terms, not only with relevance. The three cross-encoders used as gates also reach auroc 1.0 on the 30 questions, so the ranking does not separate them. What separates them is where the model's own 0.5 boundary falls. Only MiniLM answers all 20 answerable questions and refuses all 10 out-of-corpus ones at 0.5: its lowest answerable score is 0.870 and its highest out-of-corpus score is 0.156 (O06, the isotretinoin question). MedCPT lets ``Who painted the Mona Lisa?'' through (0.78), and bge-reranker-v2-m3 the multiple sclerosis question (0.85). MiniLM is also the fastest (0.84 seconds per question with all 5 passages; about 0.3 seconds for an answerable question in the system, which stops early). We chose it as the gate.
+
+This choice was made on the out-of-corpus questions, so the separation is not an independent test. \TODO{rerun \code{src/evaluate.py retrieval} (no LLM call) so that \code{results/retrieval.csv} gains the columns heldout\_auroc and heldout\_margin, and comment them here}
+
+\subsection{Threshold sweep}
+\label{sec:sweep}
+
+\input{generated/sweep_table}
+\input{generated/sweep_plot}
+
+The sweep (Table~\ref{tab:sweep}, Figure~\ref{fig:sweep}) applies thresholds from 0.30 to 0.80 to the best dense similarity of the original 30 questions. The brief's value, 0.60, is the only one with a balanced score of 1.0. At 0.55 the refusal rate drops to 0.70; at 0.65 the answer rate drops to 0.95, and to 0.25 at 0.75. A separating threshold must lie between 0.5878 and 0.6235, so the perfect score at 0.60 depends on two questions and is optimistic. We kept 0.60.
+
+\subsection{End-to-end evaluation}
+\label{sec:e2e}
+
+\input{generated/summary_table}
+\input{generated/reasons_table}
+
+Table~\ref{tab:summary} is generated from \code{results/summary.csv} as written at the end of the first day (2026-11-15), and Table~\ref{tab:reasons} from \code{results/records.jsonl}. After the fix of commit \code{514c930}, the \code{rag_hybrid} record of A19 was removed to be asked again; this is why Table~\ref{tab:reasons} has 19 answerable records for \code{rag_hybrid} where Table~\ref{tab:summary} has $n = 40$. The next run rewrites both. \TODO{after the last evaluation day: rerun \code{scripts/make_report_assets.py}, rebuild the PDF, and rewrite this subsection from the final tables (rows \code{bm25_rag}, \code{rag_dense}, the complete \code{no_rag}, and the second model)}
+
+\paragraph{What the partial results show.} On the default model, both gated systems refused all 10 out-of-corpus questions and all 10 held-out questions (refusal rate and held-out refusal rate 1.0), and answered every answerable question they have a record for, except A19 for \code{rag_hybrid}. Faithfulness is 1.0 over 19 judged answers for both systems. The two values are not independent: both systems retrieve the same passages, so the second reused the first one's answers and judge replies. Their context precision differs (0.906 against 0.911) only because \code{rag_rerank} has no record for A19.
+
+\paragraph{How the refusals happened.} Table~\ref{tab:reasons} shows that the refusal rates of 1.0 do not come from the gates alone. Every out-of-corpus question was stopped by the gate, with no model call. Of the held-out questions, the cosine gate of \code{rag_hybrid} stopped 7, and the model refused the other 3 after reading the passages. The cross-encoder gate of \code{rag_rerank} stopped only 5, and the model refused the other 5. On near-domain questions, the cross-encoder let more questions through than the cosine gate, the opposite of what the out-of-corpus questions suggested, and the prompt's instruction to refuse was the last defence for half of them (Section~\ref{sec:errors}).
+
+\paragraph{Baselines.} Only A01 to A06 were recorded for \code{no_rag}. It answered all six (answer rate 1.0), which measures that it did not refuse, not that it was right; only the human rating checks it (Section~\ref{sec:human}). \code{bm25_rag} and \code{rag_dense} have no record yet. \TODO{compare \code{rag_rerank} with both baselines on answer rate, refusal rates and human correctness once their rows exist}
+
+\paragraph{Latency.} The mean time per answer is 6.03 seconds for \code{rag_rerank}, 5.18 seconds for \code{rag_hybrid} and 9.31 seconds for \code{no_rag}. A question stopped by a gate costs 0.1 to 0.7 seconds and a model call about 2 to 26 seconds. \code{rag_rerank} is slower mainly because its gate let 5 held-out questions reach the model, against 3. A reused answer counts the seconds of the original call.
+
+\subsection{Model comparison}
+\label{sec:models}
+
+The brief's comparison of Llama~3 and GPT-4o-mini is replaced by \code{rag_rerank} on two free models, \code{nvidia/nemotron-3-ultra-550b-a55b:free} and \code{google/gemma-4-31b-it:free} (Section~\ref{sec:setup}). The second model runs last in the daily plan and has no record yet. \TODO{model comparison: read the two \code{rag_rerank} rows of Table~\ref{tab:summary}; compare answer rate, both refusal rates, faithfulness and latency, and note that the judge is the first model, which may favour it}
+
+\subsection{Human evaluation}
+\label{sec:human}
+
+\begin{table}[htbp]
+\centering
+\caption{Human ratings from \code{results/human_rating_sheet.csv}, filled by the group members: share of correct answers (\code{correct_0_1}) and mean safety and clarity (1--5). \code{no_rag} and \code{bm25_rag} are the baselines.}
+\label{tab:human}
+\small
+\begin{tabular}{@{}llrrrr@{}}
+\toprule
+Role & System (model) & Rated & Correct & Safety (1--5) & Clarity (1--5) \\
+\midrule
+baseline & \code{no_rag} & \TODO{} & \TODO{} & \TODO{} & \TODO{} \\
+baseline & \code{bm25_rag} & \TODO{} & \TODO{} & \TODO{} & \TODO{} \\
+RAG & \code{rag_dense} & \TODO{} & \TODO{} & \TODO{} & \TODO{} \\
+RAG & \code{rag_hybrid} & \TODO{} & \TODO{} & \TODO{} & \TODO{} \\
+RAG & \code{rag_rerank} (default model) & \TODO{} & \TODO{} & \TODO{} & \TODO{} \\
+RAG & \code{rag_rerank} (second model) & \TODO{} & \TODO{} & \TODO{} & \TODO{} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The sheet places each answer next to its expected answer (the ground truth, or the refusal sentence). \TODO{group members: fill \code{correct_0_1}, \code{safety_1_5} and \code{clarity_1_5} in the sheet after the last evaluation day, state who rated which rows and how disagreements were settled, then fill Table~\ref{tab:human} and comment it}

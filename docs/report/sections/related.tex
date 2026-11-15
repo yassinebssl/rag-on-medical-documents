@@ -1,0 +1,34 @@
+\section{State of the art}
+\label{sec:related}
+
+\subsection{Language models and retrieval-augmented generation}
+
+Current language models are built on the Transformer \citep{vaswani2017attention}, and pretrained encoders such as BERT \citep{devlin2019bert} can be fine-tuned for tasks such as passage ranking. Knowledge stored in the weights brings the problems of Section~\ref{sec:intro}: hallucination \citep{ji2023hallucination}, a fixed knowledge date, and no provenance.
+
+\citet{lewis2020rag} introduced retrieval-augmented generation: a dense retriever finds passages in an external collection, and a sequence-to-sequence generator conditions its output on them. They describe the collection as a non-parametric memory that can be inspected and replaced, next to the parametric memory of the weights. Their retriever is Dense Passage Retrieval \citep{karpukhin2020dpr}, a dual encoder that embeds questions and passages separately, so that passage vectors can be computed once and searched quickly. The survey of \citet{gao2023ragsurvey} groups later work into naive RAG (retrieve, then read), advanced RAG (with steps before and after retrieval, such as query rewriting and reranking) and modular RAG. Our system is an advanced RAG in that sense: hybrid retrieval, a reranking model used as a gate, and a check of the output.
+
+\subsection{Sparse, dense and hybrid retrieval}
+
+BM25 is the standard keyword ranking. It comes from the probabilistic relevance framework and combines inverse document frequency, a term frequency that saturates, and a normalisation by document length \citep{robertson2009bm25}. It matches exact strings, which matters for drug names and trial names, but it has no notion of synonyms.
+
+Dense retrievers embed text as vectors so that texts with similar meaning are close. Sentence-BERT showed how to train BERT to produce sentence embeddings that can be compared by cosine similarity \citep{reimers2019sbert}. BGE-M3 \citep{chen2024bgem3}, the model the brief prescribes, is multilingual, accepts long inputs, and can produce dense, sparse and multi-vector representations; we use its dense output. Large collections are searched with approximate nearest-neighbour indexes such as HNSW, a layered proximity graph \citep{malkov2020hnsw}, which is the index of the Chroma vector database.
+
+Dense and sparse rankings fail on different questions, so they are often combined. Reciprocal rank fusion (RRF) adds, for each document, $1/(k + r)$ over the rankings in which it appears at rank $r$ \citep{cormack2009rrf}. It uses ranks only, so it needs no calibration between scores of different scales, and the authors found that it outperformed the Condorcet fusion method and several learning-to-rank methods on their test collections.
+
+\subsection{Cross-encoders and reranking}
+
+A cross-encoder reads the question and a passage together, as one input, and outputs one relevance score. \citet{nogueira2019passage} fine-tuned BERT this way to rerank the passages of a first-stage retriever on MS MARCO, a large set of real search queries with passages marked as relevant \citep{bajaj2016msmarco}. A cross-encoder is more accurate than comparing two stored vectors, but it must run once per question--passage pair, so it is applied only to a short list. The model we use as a gate, \code{cross-encoder/ms-marco-MiniLM-L6-v2} \citep{minilmcard}, is a small model distilled with the MiniLM method \citep{wang2020minilm} and trained on MS MARCO. We compare it with two other cross-encoders: MedCPT, trained on PubMed search logs for biomedical retrieval \citep{jin2023medcpt}, and the multilingual \code{BAAI/bge-reranker-v2-m3} \citep{bgererankercard}.
+
+\subsection{Medical question answering}
+
+MedQA collects multiple-choice questions from medical licensing exams \citep{jin2021medqa}. \citet{singhal2023clinical} built the MultiMedQA benchmark and showed that adapting a large model to medicine improved its answers in a human evaluation, while the answers remained behind those of clinicians on several axes, including the risk of harm. \citet{xiong2024medrag} benchmarked RAG for medicine and found that retrieval improves the accuracy of several models, and that the choice of corpus and retriever matters. These benchmarks measure accuracy on exam-style questions. Our setting differs: the corpus is small and fixed, many questions fall outside it, and a correct refusal counts as a success.
+
+\subsection{Citations and evaluation of RAG}
+
+\citet{gao2023alce} proposed a benchmark for answers with citations and measured citation quality separately from correctness; they found that even strong models often cite passages that do not fully support the claim. This is why our citation check is only a first filter (it checks that the cited numbers exist), and why we also measure support with a judge model.
+
+RAGAS \citep{es2023ragas} defines reference-free metrics for RAG computed with a language model: faithfulness (the share of the answer's claims that the context supports), answer relevance and context relevance; its documentation also defines context precision \citep{ragascontextprecision}. Using a language model as a judge is practical but has known biases, including a preference of a model for its own answers \citep{zheng2023judge}. We follow the RAGAS definitions but compute the metrics in our own code (Section~\ref{sec:metrics}).
+
+\subsection{Position of this work}
+
+The systems above are evaluated on accuracy over large benchmarks. We work at a smaller scale with stricter rules: 50 documents, free models, a fixed refusal sentence, citations checked in code, and an evaluation where refusing the unanswerable counts as much as answering the answerable.

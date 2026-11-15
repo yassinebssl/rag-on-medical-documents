@@ -1,0 +1,80 @@
+\section{Experimental setup}
+\label{sec:setup}
+
+\subsection{Systems}
+
+Five systems are compared (Table~\ref{tab:systems}): the two baselines the course requires, and three RAG systems that each change one component.
+
+\begin{table}[htbp]
+\centering
+\caption{The five evaluated systems. All systems with passages use the same prompt and citation check; \code{no_rag} uses its own prompt (see text). The two baselines are marked.}
+\label{tab:systems}
+\small
+\begin{tabularx}{\linewidth}{@{}lllX@{}}
+\toprule
+System & Role & Passages & Gate before the model call \\
+\midrule
+\code{no_rag} & baseline & none & none; counted as a refusal only if the model writes the refusal sentence \\
+\code{bm25_rag} & baseline & 5 best BM25 chunks & none \\
+\code{rag_dense} & RAG & 5 nearest BGE-M3 chunks & best cosine similarity $\geq 0.6$ \\
+\code{rag_hybrid} & RAG & 5 best of RRF(dense 20, BM25 20) & best cosine similarity $\geq 0.6$ \\
+\code{rag_rerank} & RAG (default) & same as \code{rag_hybrid} & best MiniLM cross-encoder score $\geq 0.5$ \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+The \code{no_rag} prompt says that no documents are given and asks for an answer from the model's own knowledge; a first version, which kept the main prompt's wording, made the model refuse every question (commit \code{30bcabb}).
+
+\subsection{Language models}
+
+The brief asks for a comparison of Llama~3 and GPT-4o-mini. Neither was available to us under the project rule of free models only: on 2026-11-13, the OpenRouter API listed 471 models, of which 15 free text models, and none of them was a Llama model. GPT-4o-mini is a paid model. As recorded in the decisions log, we replaced the comparison by two free OpenRouter models:
+\begin{itemize}
+\item \code{nvidia/nemotron-3-ultra-550b-a55b:free}, the largest free model, the default generator, and the judge of faithfulness;
+\item \code{google/gemma-4-31b-it:free}, the second model, run on the default system \code{rag_rerank}.
+\end{itemize}
+\TODO{model comparison: confirm that the second model completed its 40 answers; if it is dropped after three failures in a row, name the replacement}
+
+\subsection{Hyperparameters}
+
+Table~\ref{tab:hyper} lists every constant. Each value is set in the code; none was tuned on the held-out questions.
+
+\begin{table}[htbp]
+\centering
+\caption{Constants of the system and of the evaluation, with where they are set and where the value comes from.}
+\label{tab:hyper}
+\small
+\begin{tabularx}{\linewidth}{@{}llX@{}}
+\toprule
+Constant & Value & Source of the value \\
+\midrule
+Chunk length, overlap & 512, 102 tokens & brief (20\% overlap); \code{src/ingest.py} \\
+Embedding model & \code{BAAI/bge-m3} & brief; \code{src/index.py} \\
+Passages per question (\code{TOP_K}) & 5 & brief; \code{src/rag.py} \\
+Candidates per ranking before fusion & 20 & our choice; \code{src/rag.py} \\
+RRF constant $k$ & 60 & \citet{cormack2009rrf} \\
+BM25 $k_1$, $b$ & 1.5, 0.75 & usual values \citep{robertson2009bm25}; not tuned \\
+Cosine gate threshold & 0.6 & brief; checked by the sweep (Section~\ref{sec:sweep}) \\
+Cross-encoder gate threshold & 0.5 & the model's own boundary; not tuned \\
+Gate cross-encoder & \code{ms-marco-MiniLM-L6-v2} & retrieval comparison (Section~\ref{sec:retrieval-results}) \\
+Temperature; answer and judge token budgets & 0; 600 (4,000 if cut); 4,000 & \code{call_llm}, \code{src/evaluate.py} \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\subsection{Evaluation protocol and the daily quota}
+
+OpenRouter allows this account 50 free-model requests per UTC day. One model with the judge on the original 30 questions needs at most 170 requests with the reply cache (210 without), so a full run takes several days. The evaluation is built around this:
+\begin{itemize}
+\item \textbf{Reply cache.} Every call, answers and judge, is keyed by the SHA-256 of model, prompt and token budget, and an identical request is sent once. \code{rag_hybrid} and \code{rag_rerank} retrieve the same passages, so when both gates pass, the second reuses the first one's answer and judge reply, and the two differ only by their gate.
+\item \textbf{Resumable runs.} Each answer is appended to \code{results/records.jsonl} and a rerun skips it; a failed call writes nothing and is retried later. At the daily limit the run stops, writes the summary so far, and resumes on a later day.
+\item \textbf{Daily job.} \code{scripts/run_evaluation.py} checks how many requests are left (which uses none), runs the five systems on the default model with the judge, then \code{rag_rerank} on the second model, and logs to \code{results/logs/}.
+\end{itemize}
+The plan has 240 answers: 5 systems $\times$ 40 questions on the default model, and 40 on the second model. On the first day, 2026-11-15, the job started with 47 requests left, recorded 85 answers (40 for \code{rag_hybrid}, 39 for \code{rag_rerank}, whose call for A19 failed, and 6 for \code{no_rag}), and stopped at the quota with 155 answers to go. \TODO{date on which the evaluation finished, and the number of days it took}
+
+The retrieval comparison and the sweep make no model call; both were run on the original 30 questions, before the held-out questions existed.
+
+\subsection{Hardware and software}
+
+Everything runs on a laptop CPU with no GPU: the machine that runs the evaluation has an Intel Core i5-8365U (8 threads) and 15~GiB of RAM. Colab was not needed. The software is Python~3.12 with PyTorch 2.15.0 (CPU build), sentence-transformers 6.3.0, chromadb 1.5.9, pypdf 7.1.0, cryptography 50.0.2, Gradio 6.32.0 and pytest 9.2.0, all pinned in \code{requirements.txt}. The tests use fakes for every model and the database, and run offline.
+
+\paragraph{Reproducibility.} Retrieval and the gates are deterministic for a given index. The model calls use temperature 0, but a hosted free model is not guaranteed to be deterministic: the same request for A19 gave two different outcomes (Section~\ref{sec:errors}). The reported numbers therefore come from the stored replies, which the cache keeps. A PubMed text fetched later may differ if Europe PMC updated the article; \code{check_eval_set.py} checks that the evidence quotes are still found.

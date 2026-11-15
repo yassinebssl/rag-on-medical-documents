@@ -1,0 +1,23 @@
+\begin{table}[htbp]
+\centering
+\caption{Threshold sweep of the dense similarity gate on the original 30 questions (from \texttt{results/threshold\_sweep.csv}). Balanced is the mean of the answer rate on A01--A20 and the refusal rate on O01--O10. The lowest threshold, which refuses almost nothing, plays the role of a system without a gate.}
+\label{tab:sweep}
+{%
+\begin{tabular}{rrrrl}
+\toprule
+Threshold & Answer rate & Refusal rate & Balanced & Note \\
+\midrule
+0.3 & 1.0 & 0.0 & 0.5 &  \\
+0.35 & 1.0 & 0.1 & 0.55 &  \\
+0.4 & 1.0 & 0.2 & 0.6 &  \\
+0.45 & 1.0 & 0.3 & 0.65 &  \\
+0.5 & 1.0 & 0.3 & 0.65 &  \\
+0.55 & 1.0 & 0.7 & 0.85 &  \\
+0.6 & 1.0 & 1.0 & 1.0 & best balanced \\
+0.65 & 0.95 & 1.0 & 0.975 &  \\
+0.7 & 0.65 & 1.0 & 0.825 &  \\
+0.75 & 0.25 & 1.0 & 0.625 &  \\
+0.8 & 0.1 & 1.0 & 0.55 &  \\
+\bottomrule
+\end{tabular}}
+\end{table}

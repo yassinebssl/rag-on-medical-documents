@@ -1,0 +1,125 @@
+\section{Methodology}
+\label{sec:method}
+
+Figure~\ref{fig:pipeline} shows the path of a question. The code is in seven files of \code{src/}: \code{ingest.py}, \code{index.py}, \code{bm25.py}, \code{rag.py}, \code{rerank.py}, \code{evaluate.py} and \code{app.py}. This section follows the data flow; Table~\ref{tab:hyper} in Section~\ref{sec:setup} lists every constant.
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}[
+  node distance=5mm and 5mm,
+  box/.style={draw, rounded corners=2pt, align=center, font=\footnotesize, minimum height=9mm, text width=23mm, fill=blue!4},
+  gate/.style={box, fill=orange!12},
+  answerbox/.style={box, fill=green!8},
+  refuse/.style={box, fill=red!8},
+  arr/.style={-{Latex[length=2mm]}, thick}]
+\node[box] (q) {Question};
+\node[box, right=of q] (dense) {BGE-M3 dense\\top 20 (Chroma)};
+\node[box, below=of dense] (bm25) {BM25 (from scratch)\\top 20};
+\node[box, right=of dense, yshift=-7mm] (rrf) {Reciprocal rank\\fusion, keep 5};
+\node[gate, right=of rrf] (gate) {Gate: cross-encoder\\score $\geq 0.5$?};
+\node[refuse, right=of gate] (ref) {Fixed refusal\\sentence};
+\node[box, below=12mm of gate] (llm) {Free LLM on OpenRouter, passages [1]--[5]};
+\node[gate, below=12mm of ref] (check) {Citation check: $\geq 1$ citation, all in 1..5?};
+\node[answerbox, below=of check] (ans) {Answer with\\source labels};
+\draw[arr] (q) -- (dense);
+\draw[arr] (q.south) |- (bm25);
+\draw[arr] (dense) -- (rrf);
+\draw[arr] (bm25) -| (rrf);
+\draw[arr] (rrf) -- (gate);
+\draw[arr] (gate) -- node[right, font=\scriptsize]{yes} (llm);
+\draw[arr] (gate) -- node[above, font=\scriptsize]{no} (ref);
+\draw[arr] (llm) -- (check);
+\draw[arr] (check) -- node[right, font=\scriptsize]{yes} (ans);
+\draw[arr] (check) -- node[right, font=\scriptsize, align=left]{no, or the model\\wrote the sentence} (ref);
+\end{tikzpicture}
+\caption{Path of a question in the default system (\code{rag_rerank}). The variant \code{rag_dense} skips BM25 and fusion; \code{rag_dense} and \code{rag_hybrid} use the cosine similarity gate (best dense similarity $\geq 0.6$) instead of the cross-encoder. The model is called only when the gate passes.}
+\label{fig:pipeline}
+\end{figure}
+
+\subsection{Loading and chunking}
+\label{sec:ingest}
+
+\code{load_documents} reads each WHO PDF page by page with pypdf and skips pages of 50 characters or fewer, so every WHO chunk keeps the page number its citation needs. A PubMed article becomes one record with no page, cited by its title from the manifest.
+
+\code{chunk_document} cuts each record into windows of 512 tokens of the BGE-M3 tokenizer, overlapping by 102 tokens (20\%, the brief's value), so the window moves by 410 tokens. A sentence of up to 102 tokens that is cut at the end of one window appears whole at the start of the next. A chunk keeps its source, page and first token, and its id is \code{source|page|start_token}. The id is stable from one run to the next, which makes the index build resumable.
+
+\subsection{Embedding and dense retrieval}
+
+Each chunk is embedded with \code{BAAI/bge-m3} \citep{chen2024bgem3,bgem3card} through sentence-transformers \citep{reimers2019sbert}, with normalised vectors, and stored in a persistent Chroma collection \citep{chroma} that uses cosine distance. For two vectors $\mathbf{u}$ and $\mathbf{v}$ the cosine similarity is
+\begin{equation}
+\cos(\mathbf{u},\mathbf{v}) = \frac{\mathbf{u}\cdot\mathbf{v}}{\lVert\mathbf{u}\rVert\,\lVert\mathbf{v}\rVert},
+\end{equation}
+and Chroma reports the distance $1-\cos$. Our code converts it back, so that a higher similarity always means closer (the course's code skeleton compared a raw distance with the threshold, which points the wrong way). The question is embedded the same way, and the 5 nearest chunks are the passages. The build takes about 3 hours on a laptop CPU, so \code{build_index} saves every 96 chunks and, when restarted, embeds only the missing ids.
+
+\subsection{BM25 from scratch}
+
+Dense embeddings can miss an exact string, such as the drug name zilebesiran (A16). \code{src/bm25.py} implements Okapi BM25 \citep{robertson2009bm25} with the standard library, as an inverted index over lowercased tokens. With $N$ chunks, $\mathrm{df}(t)$ chunks containing term $t$, $\mathrm{tf}$ the count of $t$ in chunk $d$, $|d|$ its length and $\overline{|d|}$ the mean length:
+\begin{align}
+\mathrm{idf}(t) &= \ln\!\left(1 + \frac{N - \mathrm{df}(t) + 0.5}{\mathrm{df}(t) + 0.5}\right),\\
+\mathrm{score}(q,d) &= \sum_{t\in q} \mathrm{idf}(t)\,\frac{\mathrm{tf}\,(k_1+1)}{\mathrm{tf} + k_1\left(1 - b + b\,|d|/\overline{|d|}\right)},
+\end{align}
+with $k_1 = 1.5$ and $b = 0.75$. The idf of \citet{robertson2009bm25} has no $1+$ inside the logarithm and becomes negative for a term found in more than half the chunks; the variant above stays positive and is the one of Apache Lucene \citep{lucenebm25}. The code follows two tutorials \citep{loria_tfidf,boyter_vsm} (see Tools Used). BM25 is built in memory from the chunks stored in Chroma, so both retrievers see the same chunks.
+
+\subsection{Hybrid retrieval by reciprocal rank fusion}
+
+In hybrid mode, the 20 best chunks of each retriever are fused by RRF \citep{cormack2009rrf}:
+\begin{equation}
+\mathrm{RRF}(d) = \sum_{\text{rankings } R \ni d} \frac{1}{k + r_R(d)}, \qquad k = 60,
+\end{equation}
+where $r_R(d)$ is the rank of $d$ in $R$, counted from 1; the first 5 fused chunks are the passages. RRF needs no common scale between a cosine similarity and an unbounded BM25 score. The function \code{rrf} has the structure of the one in the \emph{rag-from-scratch} tutorial \citep{ragfromscratch}, but counts ranks from 1, as the paper does.
+
+\subsection{Refusal gates}
+\label{sec:gates}
+
+Retrieval always returns five passages, even for ``Who painted the Mona Lisa?''. A gate decides, before any model call, whether the passages are close enough to the question.
+
+\paragraph{Cosine similarity gate.} The system refuses when the best dense similarity is below 0.6, the brief's value. In hybrid mode the gate still uses the best dense similarity, because a BM25 score has no fixed scale to compare with a threshold.
+
+\paragraph{Cross-encoder gate.} The cosine similarity of two separately embedded texts measures whether they share a topic, and an out-of-corpus medical question often does. Question O06 (``How long is a typical course of isotretinoin for severe acne?'') has a best similarity of 0.588, only 0.012 below the threshold. A cross-encoder reads the question and the passage together and scores whether the passage answers the question \citep{nogueira2019passage}. Our gate scores the 5 hybrid passages with \code{cross-encoder/ms-marco-MiniLM-L6-v2}, maps the raw score $z$ to $\sigma(z) = 1/(1+e^{-z})$, and refuses when the best $\sigma(z)$ is below 0.5. The value 0.5 is the model's own boundary between relevant and not relevant, so it was not tuned on our questions. Scoring stops at the first passage, in retrieval order, that reaches 0.5: the decision is the same as with the best score, and an answerable question usually needs one passage instead of five. The cross-encoder only gates; it does not reorder the passages (Section~\ref{sec:retrieval-results}).
+
+\subsection{Prompt and generation}
+
+The passages are numbered [1] to [5] in the prompt, each under its source label. The prompt, \code{PROMPT} in \code{src/rag.py}, reads:
+
+\begin{quote}\small\ttfamily\raggedright
+You are a medical assistant. Answer ONLY using the numbered passages below. After every claim, cite the passage it comes from by its number in square brackets, like [1] or [2][4]. Use only the passage numbers given. If the passages do not contain the answer, say exactly: "I cannot answer this question from the provided documents." This is not medical advice. Do not diagnose. For doses, quote the passage and tell the user to check with a clinician.\\
+Passages: \{context\}\quad Question: \{question\}\quad Answer (with citations):
+\end{quote}
+
+The last two instructions are the guardrails of our architecture notes. Articles cite their own references as [12] or [3,~4]; a copied [3] would pass the check while pointing to the wrong passage, so \code{format_context} rewrites such markers to (12) and (3,~4) in the prompt.
+
+The model is called through the OpenRouter API \citep{openrouter} with temperature 0 and a budget of 600 tokens. Only free models are allowed: \code{check_free}, the first statement of \code{call_llm}, raises an error unless the model id ends in \code{:free}, so a typo cannot reach a paid model. \code{call_llm} retries rate limits, server errors and empty replies up to four attempts (pauses of 10, 20 and 40 seconds), stops at once when the daily quota is used up, and resends once with 4,000 tokens a reply that a reasoning model left empty after using the whole budget on hidden reasoning (commit \code{514c930}).
+
+\subsection{Citation check}
+
+A reply is kept only if it cites at least one passage and every cited number is between 1 and the number of passages. Each number is then replaced by the label of its source: \emph{file, p.~N} for a WHO page, or the article title for a PubMed article. If the model writes the refusal sentence, or the check fails, the answer becomes the refusal sentence:
+\begin{center}
+\texttt{I cannot answer this question from the provided documents.}
+\end{center}
+Every result carries one reason: \code{answered}, \code{below_threshold} or \code{below_rerank_threshold} (the gate refused, no model call), \code{model_refused} (the model wrote the sentence), \code{uncited} (no valid citation) or \code{no_context}.
+
+The check confirms that the cited numbers exist, not that a passage supports the claim next to it: ``Paracetamol treats fever [1, 2]'' passes when neither passage says so. Faithfulness (Section~\ref{sec:metrics}) measures support.
+
+\subsection{Application}
+
+\code{src/app.py} is a Gradio page \citep{gradio} with a question box, a model menu (free models only), the retrieval mode and a threshold slider. It shows the answer, the reason for a refusal, and a table of the five passages with source, page, similarity and whether they were cited. The page and every answer carry a disclaimer: not medical advice, check with a clinician, and type nothing that identifies a patient.
+
+\subsection{Evaluation metrics}
+\label{sec:metrics}
+
+\code{src/evaluate.py} computes one row of metrics per system and model.
+
+\begin{itemize}
+\item \textbf{Answer rate}: share of A01--A20 not refused. \textbf{Refusal rate}: share of O01--O10 refused. \textbf{Held-out refusal rate}: share of N01--N10 refused.
+\item \textbf{Hit rate}: share of answerable questions with at least one passage from the expected source document.
+\item \textbf{Context precision}: for each answerable question, with $\mathrm{rel}_k = 1$ when the passage at rank $k$ is relevant,
+\begin{equation}
+\mathrm{CP} = \frac{\sum_{k=1}^{5} \mathrm{rel}_k \cdot \mathrm{P@}k}{\sum_{k=1}^{5} \mathrm{rel}_k}, \qquad \mathrm{P@}k = \frac{1}{k}\sum_{i=1}^{k}\mathrm{rel}_i,
+\end{equation}
+and 0 when no passage is relevant, averaged over the questions. It follows the RAGAS definition \citep{ragascontextprecision}, with one change: a passage is relevant when it comes from the question's source document, a label taken from the question set instead of a language model judge.
+\item \textbf{Faithfulness}: for each answered question that has passages, a judge model splits the answer into claims and counts those the passages fully support; the score is supported claims over all claims \citep{es2023ragas}, averaged over the answers for which the judge returned readable counts ($n_\text{judged}$). The judge is always the default model, with 4,000 tokens.
+\item \textbf{Mean latency}: seconds per answer, including retrieval, the gate and the model call.
+\item \textbf{Human rating}: \code{correct_0_1}, \code{safety_1_5} and \code{clarity_1_5}, marked by a member next to the expected answer. It is the only check against the ground truth, and the only one that covers \code{no_rag}.
+\end{itemize}
+
+Answer and refusal rates go together: refusing everything gives a perfect refusal rate and an answer rate of zero. For the sweep, \emph{balanced} is their mean. The \code{ragas} package is not used; our code computes the metrics offline with the question set's labels.

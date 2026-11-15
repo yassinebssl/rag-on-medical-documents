@@ -1,0 +1,62 @@
+\section{Error analysis (preliminary)}
+\label{sec:errors}
+
+This analysis uses the 85 records of the first day (\code{results/records.jsonl}, and \path{results/backup_before_A19_clear/} for A19), the run log and the retrieval comparison. It is preliminary: \code{bm25_rag}, \code{rag_dense} and the second model have no records yet, and no answer has been rated. Correctness is left to the human rating. \TODO{extend with the failures of \code{bm25_rag}, \code{rag_dense} and the second model, any \code{uncited} reply, and the answers rated incorrect or unsafe in the rating sheet}
+
+\subsection{Held-out questions that passed the gates}
+
+Table~\ref{tab:heldout} gives, for each held-out question, the score each gate saw and what happened. Five questions passed the cross-encoder gate and three passed the cosine gate; in every one of these cases the model read the passages and wrote the refusal sentence.
+
+\begin{table}[htbp]
+\centering
+\caption{Held-out questions on the default model (from \code{results/records.jsonl}). Cosine: best dense similarity, gate at 0.6 (\code{rag_hybrid}). CE: cross-encoder gate score (sigmoid), gate at 0.5 (\code{rag_rerank}). Gate: refused by the gate with no model call; model: the gate passed and the model refused. No held-out question was answered.}
+\label{tab:heldout}
+\small
+\begin{tabularx}{\linewidth}{@{}lXrlrl@{}}
+\toprule
+ID & What is asked & Cosine & \code{rag_hybrid} & CE & \code{rag_rerank} \\
+\midrule
+N01 & mechanism of action of baxdrostat & 0.495 & gate & 0.046 & gate \\
+N02 & thyroid cancer contraindicating GLP-1 receptor agonists & 0.573 & gate & 0.702 & model \\
+N03 & thiazolidinedione withdrawn for liver toxicity & 0.464 & gate & 0.005 & gate \\
+N04 & drug tested in the REDUCE-IT trial & 0.578 & gate & 0.656 & model \\
+N05 & number of doses of the RTS,S/AS01 malaria vaccine & 0.557 & gate & 0.060 & gate \\
+N06 & positive tuberculin skin test induration with HIV & 0.704 & model & 0.977 & model \\
+N07 & genetic test before abacavir & 0.517 & gate & 0.037 & gate \\
+N08 & aspirin dose to prevent pre-eclampsia & 0.628 & model & 0.948 & model \\
+N09 & enzyme converting paracetamol to NAPQI & 0.522 & gate & 0.437 & gate \\
+N10 & maintenance dose of sotatercept & 0.638 & model & 0.790 & model \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\paragraph{Why the gates let them through.} The highest scores go to questions whose passages come from the right document: N06 retrieves the WHO tuberculosis and comorbidities module, N08 the WHO antenatal care recommendations, N10 a review of pulmonary arterial hypertension treatment. The passages are on the exact topic, so both gates rate them high although the asked value is not there. A gate that scores topical relevance cannot tell ``this passage is about the question'' from ``this passage answers it''. The cross-encoder also passed N02 and N04, which the cosine gate stopped, and N09 came close (0.437).
+
+\paragraph{What caught them.} The model's own refusal, as the prompt instructs. It held every time here, but it is the least controlled defence: another model may answer from memory and cite a passage that is merely on topic, which the citation check would accept.
+
+\paragraph{A caution on the labels.} When passages score as high as for N06 (0.977) and N08 (0.948), the fact may be in the corpus in words the keyword search missed, and the refusal would then be a missed answer. \TODO{check by reading the retrieved passages of N06 and N08 (and N10) whether the corpus states the asked value; if it does, report it and do not count that refusal as correct}
+
+\subsection{A false refusal and a token budget used up (A19)}
+
+A19 asks for the starting dose of basal insulin added to a GLP-1 receptor agonist; all five passages come from the expected article. For \code{rag_rerank}, the model spent the whole 600-token budget on hidden reasoning and returned no text, so no record was written. A failed call is not cached, so \code{rag_hybrid} sent the same request again, and this time the model replied with the refusal sentence: the only refusal of an answerable question so far, which lowered the answer rate of \code{rag_hybrid} to 0.95. Two lessons follow: a reasoning model can exhaust a budget that is ample for the answer (\code{call_llm} now retries once with 4,000 tokens), and temperature 0 does not make a hosted model deterministic. The record was removed, with a backup, so that A19 is asked again. \TODO{report the new A19 outcome for both systems}
+
+\subsection{Confident baseline answers from other guidelines}
+
+The \code{no_rag} baseline answered all six recorded questions without any refusal. Two answers differ from the expected answer:
+\begin{itemize}
+\item A02 asks which blood pressure values define stage~2 hypertension. The expected answer, from a WHO guideline in the corpus, is 160~mmHg systolic or 100~mmHg diastolic and above. The baseline gives 140/90~mmHg, from the 2017 ACC/AHA guideline, and adds in a note that other guidelines use 160/100.
+\item A03 asks for the maximum daily sodium intake for adults. The expected answer, from the WHO sodium guideline, is less than 2~g of sodium a day. The baseline gives less than 2,300~mg and attributes it to several bodies, WHO among them.
+\end{itemize}
+Both follow real guidelines of other bodies or years, which is the danger: the answer cannot be traced, mixes guidelines without saying which applies, and nothing flags it. The RAG systems gave the corpus's values, with the WHO page. \TODO{human rating decides whether these two answers count as incorrect; report the \code{no_rag} correctness rate}
+
+\subsection{Retrieval misses that did not hurt the answer}
+
+For A06 (parenteral artesunate) and A07 (primaquine), the hybrid passages miss the evidence page (pages 14 and 12 of the WHO malaria guideline), yet the answers state the expected facts, cited to other pages of the same guideline (75 to 86, and 35 to 46). Long guidelines repeat a recommendation in a summary and in the main text. Our labels are coarse both ways: the page hit rate counts these as misses, while hit rate and context precision count any passage from the right document as relevant.
+
+\subsection{Passages from another document}
+
+For A04 (starting dose of metformin), the first passage comes from the article on SGLT2 inhibitors and the WHO passage with the answer is second (context precision 0.5); the answer cites only the WHO passage. For A02, the answer cites the expected WHO guideline and, between two such citations, a passage from a WHO diabetes guideline. The label counts that passage as not relevant, the citation check accepts its number, and the judge counted the claim as supported; no automatic check says whether that passage states the definition.
+
+\subsection{Citations: location, authority and date}
+
+A PubMed article is cited by its title only, since its text has no pages: the answer to A14 cites the same title four times in a row, and a reader must search a whole article (27,564 bytes of text) for the sentence. A13, the brief's own example (adult dose of paracetamol), is answered from a study of dosing errors reported to a poisons centre, since no WHO guideline of the corpus states it; a reader may take the article for a guideline. A18 asks about ``the latest NICE guidelines''; the answer is only as recent as the article in the corpus.

@@ -1,0 +1,19 @@
+\begin{table}[htbp]
+\centering
+\caption{Outcome of each recorded answer, by system, model and question group (counted from \texttt{results/records.jsonl}). \texttt{no\_rag} and \texttt{bm25\_rag} are the baselines. Gate: refused before any model call. By model: the model wrote the refusal sentence. Uncited: the reply had no valid citation. Other: any other reason, such as no passage.}
+\label{tab:reasons}
+\resizebox{\linewidth}{!}{%
+\begin{tabular}{lllrrrrrr}
+\toprule
+System & Model & Questions & n & Answered & Gate & By model & Uncited & Other \\
+\midrule
+\texttt{no\_rag} & nvidia/nemotron-3-ultra-550b-a55b:free & A01--A20 & 6 & 6 & 0 & 0 & 0 & 0 \\
+\texttt{rag\_hybrid} & nvidia/nemotron-3-ultra-550b-a55b:free & A01--A20 & 19 & 19 & 0 & 0 & 0 & 0 \\
+\texttt{rag\_hybrid} & nvidia/nemotron-3-ultra-550b-a55b:free & O01--O10 & 10 & 0 & 10 & 0 & 0 & 0 \\
+\texttt{rag\_hybrid} & nvidia/nemotron-3-ultra-550b-a55b:free & N01--N10 & 10 & 0 & 7 & 3 & 0 & 0 \\
+\texttt{rag\_rerank} & nvidia/nemotron-3-ultra-550b-a55b:free & A01--A20 & 19 & 19 & 0 & 0 & 0 & 0 \\
+\texttt{rag\_rerank} & nvidia/nemotron-3-ultra-550b-a55b:free & O01--O10 & 10 & 0 & 10 & 0 & 0 & 0 \\
+\texttt{rag\_rerank} & nvidia/nemotron-3-ultra-550b-a55b:free & N01--N10 & 10 & 0 & 5 & 5 & 0 & 0 \\
+\bottomrule
+\end{tabular}}
+\end{table}

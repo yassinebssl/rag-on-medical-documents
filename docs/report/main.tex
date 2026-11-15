@@ -1,0 +1,89 @@
+% Final report, Project 2: RAG on Medical Documents.
+% Build from docs/report/:  pdflatex main && bibtex main && pdflatex main && pdflatex main
+% The tables and the sweep figure in generated/ are written by
+%   .venv/bin/python scripts/make_report_assets.py   (run from the repository root)
+% Rerun it after each evaluation day, then rebuild this PDF.
+\documentclass[11pt,a4paper]{article}
+
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage{microtype}
+\usepackage[margin=2.2cm]{geometry}
+\usepackage{amsmath}
+\usepackage{booktabs}
+\usepackage{tabularx}
+\usepackage{graphicx}
+\usepackage{xcolor}
+\usepackage{enumitem}
+\usepackage{caption}
+\usepackage{xurl}
+\usepackage[numbers,square,sort&compress]{natbib}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta,positioning,fit}
+\usepackage{pgfplots}
+\pgfplotsset{compat=1.18}
+\usepackage[colorlinks=true,linkcolor=blue!50!black,citecolor=green!40!black,urlcolor=blue!50!black]{hyperref}
+
+\setlist{itemsep=2pt,topsep=4pt}
+\captionsetup{font=small,labelfont=bf}
+\setlength{\parskip}{2pt}
+\setlength{\bibsep}{2pt plus 1pt}
+\renewcommand{\bibfont}{\footnotesize}
+
+% Anything still missing prints in red. The final version must have none.
+\newcommand{\TODO}[1]{\textcolor{red}{\textbf{[TODO:} #1\textbf{]}}}
+% Identifiers from the code (underscores allowed).
+\newcommand{\code}[1]{\texttt{\detokenize{#1}}}
+
+\hypersetup{pdftitle={Cited Answers or Refusals: Retrieval-Augmented Question Answering over WHO Guidelines and PubMed Articles},
+            pdfauthor={Boussoualim Yassine, Benahcene Mohamed Wassim, Aissaoui Anes Safouane, Djerdali Mohamed Achraf}}
+
+\begin{document}
+
+\begin{titlepage}
+\centering
+{\small \TODO{school name and logo} \\ \TODO{programme, section letter} \hfill Group \TODO{group number} \par}
+\vspace{1.2cm}
+{\small LLM Final Projects 2026--2027, Prof.\ A.\ Moussaoui --- Project 2: RAG on Medical Documents\par}
+\vspace{1.5cm}
+{\LARGE\bfseries Cited Answers or Refusals:\\[4pt] Retrieval-Augmented Question Answering\\[4pt] over WHO Guidelines and PubMed Articles\par}
+\vspace{1.2cm}
+{\large Boussoualim Yassine \quad Benahcene Mohamed Wassim \\[3pt] Aissaoui Anes Safouane \quad Djerdali Mohamed Achraf\par}
+\vspace{0.8cm}
+{\normalsize Final report \quad \TODO{hand-in date (no later than 2026-12-12)}\par}
+\vspace{1.2cm}
+\begin{minipage}{0.88\linewidth}
+\input{sections/abstract}
+\end{minipage}
+\vfill
+\begin{flushleft}
+\small
+\textbf{Signatures} (the four members declare that this report is their work, with the AI use stated in Section~\ref{sec:tools}):\\[10pt]
+\begin{tabular}{@{}p{0.23\linewidth}p{0.23\linewidth}p{0.23\linewidth}p{0.23\linewidth}@{}}
+\hrulefill & \hrulefill & \hrulefill & \hrulefill \\
+Boussoualim Y. & Benahcene M.\,W. & Aissaoui A.\,S. & Djerdali M.\,A. \\
+\end{tabular}\\[4pt]
+\TODO{signatures on the printed copy; attach the signed Annex A checklist}
+\end{flushleft}
+\end{titlepage}
+
+\noindent\fbox{\parbox{0.96\linewidth}{\small\textbf{Status of the numbers.} The retrieval comparison and the threshold sweep are complete. The end-to-end evaluation runs under a quota of 50 free model requests a day and was about one third done when this version was written (85 of 240 planned answers recorded on 2026-11-15). Tables~\ref{tab:retrieval}--\ref{tab:reasons} and Figure~\ref{fig:sweep} are generated from the results files by \code{scripts/make_report_assets.py}; every value still missing is marked \TODO{like this}.}}
+\vspace{0.3cm}
+
+\input{sections/introduction}
+\input{sections/related}
+\input{sections/dataset}
+\input{sections/methodology}
+\input{sections/setup}
+\input{sections/results}
+\input{sections/error_analysis}
+\input{sections/discussion}
+\input{sections/conclusion}
+
+\bibliographystyle{unsrtnat}
+\bibliography{refs}
+
+\input{sections/tools}
+
+\end{document}

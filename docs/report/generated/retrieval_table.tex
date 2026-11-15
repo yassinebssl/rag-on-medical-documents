@@ -1,0 +1,21 @@
+\begin{table}[htbp]
+\centering
+\caption{Retrieval and gate comparison on the original 30 questions, with no LLM call (from \texttt{results/retrieval.csv}). BM25 is the keyword baseline. \emph{+name} rows reorder the 20 fused candidates with a cross-encoder; \emph{\_gate} rows keep the hybrid passages and use the cross-encoder score only for the refusal gate. The margin is in the units of each score (cosine, BM25 score, cross-encoder logit or probability); gap\_share divides it by the score range.}
+\label{tab:retrieval}
+\resizebox{\linewidth}{!}{%
+\begin{tabular}{llrrrrrrr}
+\toprule
+Retriever & Used by & hit\_rate & page\_hit\_rate & context\_precision & auroc & margin & gap\_share & mean\_latency\_ms \\
+\midrule
+dense & rag\_dense & 0.95 & 0.8 & 0.857 & 1.0 & 0.0357 & 0.074 & 185 \\
+bm25 & bm25\_rag (baseline) & 1.0 & 0.95 & 0.932 & 0.945 & -5.8951 & -0.157 & 7 \\
+hybrid & rag\_hybrid, rag\_rerank & 1.0 & 0.9 & 0.911 & 1.0 & 0.0357 & 0.074 & 223 \\
+hybrid+medcpt & -- & 0.95 & 0.8 & 0.889 & 0.995 & -0.0001 & -0.0 & 14720 \\
+hybrid+medcpt\_gate & -- & 1.0 & 0.9 & 0.911 & 1.0 & 0.2224 & 0.222 & 3001 \\
+hybrid+bge & -- & 1.0 & 0.95 & 0.908 & 1.0 & 0.0633 & 0.064 & 45935 \\
+hybrid+bge\_gate & -- & 1.0 & 0.9 & 0.911 & 1.0 & 0.0283 & 0.028 & 10704 \\
+hybrid+minilm & -- & 0.95 & 0.9 & 0.906 & 1.0 & 3.5874 & 0.19 & 2175 \\
+hybrid+minilm\_gate & rag\_rerank (gate) & 1.0 & 0.9 & 0.911 & 1.0 & 3.5874 & 0.187 & 837 \\
+\bottomrule
+\end{tabular}}
+\end{table}

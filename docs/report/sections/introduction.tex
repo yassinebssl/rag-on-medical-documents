@@ -1,0 +1,21 @@
+\section{Introduction}
+\label{sec:intro}
+
+Large language models answer medical questions fluently and score well on medical exam benchmarks \citep{singhal2023clinical}, yet they can state facts that no source supports, a failure known as hallucination \citep{ji2023hallucination}. In medicine a wrong dose or an outdated threshold reads exactly like a correct one. A model's knowledge also stops at its training date, while guidelines are revised, and it cannot say where a fact comes from.
+
+Retrieval-augmented generation (RAG) addresses these problems by giving the model passages from a chosen document collection at the time of the question \citep{lewis2020rag}. The answer can then be traced to a passage, and the collection can be updated without retraining the model. RAG does not remove the risk by itself: retrieval always returns passages, even for a question the collection cannot answer, and the model may still answer from memory. A medical system must also show which passage supports each claim, and refuse when the collection does not hold the answer.
+
+The project brief sets this target: answer medical questions from WHO guidelines and PubMed articles, cite the sources, and refuse when the information is missing. A refusal is acceptable; an unsupported answer is not.
+
+\paragraph{Objectives.} We set five objectives:
+\begin{enumerate}
+\item Build the pipeline of the brief: 50 documents, 512-token chunks with 20\% overlap, BGE-M3 embeddings in Chroma, top-5 retrieval, and a Gradio app.
+\item Make every answer cite the retrieved passages by number, and check the citations in code before the answer is shown.
+\item Refuse with one fixed sentence when the passages do not answer the question, and measure how often the system refuses correctly and how often it refuses wrongly.
+\item Compare the system with the two baselines the course requires: the model with no retrieval, and BM25 keyword retrieval.
+\item Report the results with an error analysis, and state what the system cannot do.
+\end{enumerate}
+
+\paragraph{Contributions.} Beyond the brief's minimum: a BM25 written from scratch and fused with dense retrieval; a cross-encoder refusal gate chosen with no language model call; a citation check that turns an answer without a valid passage number into a refusal; a 40-question set with a held-out near-domain group; and an evaluation that fits a quota of 50 free requests a day.
+
+\paragraph{Outline.} Sections~\ref{sec:related} to \ref{sec:setup} cover related work, the data, the method and the setup; Sections~\ref{sec:results} to \ref{sec:conclusion} the results, an error analysis, the discussion and the conclusion. The last section declares the tools used, including AI assistance.
