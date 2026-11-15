@@ -8,7 +8,11 @@ https://github.com/codecrafters-io/build-your-own-x):
 - https://stevenloria.com/tf-idf/ (term and document frequencies, idf)
 - https://boyter.org/2010/08/build-vector-space-search-engine-python/ (tokenize, index, rank)
 The scoring formula is Okapi BM25 from Robertson and Zaragoza, "The Probabilistic
-Relevance Framework: BM25 and Beyond", 2009:
+Relevance Framework: BM25 and Beyond", 2009. Their idf is log((N - df + 0.5) / (df + 0.5)),
+which is negative for a term found in more than half the chunks. The idf below adds 1
+inside the logarithm, which keeps it positive: this variant is the one of Apache Lucene's
+BM25Similarity (https://lucene.apache.org/core/9_11_1/core/org/apache/lucene/search/similarities/BM25Similarity.html)
+and of the Wikipedia page "Okapi BM25" (https://en.wikipedia.org/wiki/Okapi_BM25).
   idf(t)      = ln(1 + (N - df + 0.5) / (df + 0.5))
   score(q, d) = sum over t in q of idf(t) * tf * (k1 + 1) / (tf + k1 * (1 - b + b * dl / avgdl))
 """
