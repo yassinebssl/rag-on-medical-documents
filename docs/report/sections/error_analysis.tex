@@ -51,7 +51,9 @@ Both follow real guidelines of other bodies or years, which is the danger: the a
 
 \subsection{Retrieval misses that did not hurt the answer}
 
-For A06 (parenteral artesunate) and A07 (primaquine), the hybrid passages miss the evidence page (pages 14 and 12 of the WHO malaria guideline), yet the answers state the expected facts, cited to other pages of the same guideline (75 to 86, and 35 to 46). Long guidelines repeat a recommendation in a summary and in the main text. Our labels are coarse both ways: the page hit rate counts these as misses, while hit rate and context precision count any passage from the right document as relevant.
+For A06 (parenteral artesunate) and A07 (primaquine), the hybrid passages miss the evidence page (pages 14 and 12 of the WHO malaria guideline), yet the answers state the expected facts, cited to other pages of the same guideline (75 to 86, and 35 to 46). Our labels are coarse both ways: the page hit rate counts these as misses, while hit rate and context precision count any passage from the right document as relevant.
+
+Fusion explains both misses (\code{notebooks/02_retrieval_and_refusal_gate.ipynb}). For A06, dense retrieval ranks page 14 fifth but BM25 does not return it, so its single fusion term, $1/(60+5)$, is passed by chunks that both lists return, and it ends 14th. For A07, BM25 ranks page 12 fourth, dense retrieval 16th, and it ends 7th. Fusion rewards what both rankings agree on, so a page found by one alone can drop out. Here page 79 repeats the recommendation (artesunate for at least 24\,h, then an ACT); a recommendation stated once would be lost.
 
 \subsection{Passages from another document}
 
