@@ -194,12 +194,28 @@ def test_call_llm_sends_the_token_budget(monkeypatch):
     assert [json.loads(c.data)["max_tokens"] for c in calls] == [600, 4000]
 
 
-def test_call_llm_raises_at_once_when_reasoning_uses_the_whole_budget(monkeypatch):
-    cut = {"choices": [{"message": {"content": ""}, "finish_reason": "length"}]}
-    calls = fake_urlopen(monkeypatch, [cut, "ok"])
+CUT = {"choices": [{"message": {"content": ""}, "finish_reason": "length"}]}
+
+
+def test_call_llm_resends_once_with_a_larger_budget_when_reasoning_uses_the_whole_budget(monkeypatch):
+    calls = fake_urlopen(monkeypatch, [CUT, "ok"])
+    monkeypatch.setattr(rag.time, "sleep", lambda seconds: 1 / 0)
+    assert rag.call_llm("p", rag.DEFAULT_MODEL, "k") == "ok"
+    assert [json.loads(c.data)["max_tokens"] for c in calls] == [600, rag.LENGTH_RETRY_TOKENS]
+
+
+def test_call_llm_raises_when_the_larger_budget_is_used_up_too(monkeypatch):
+    calls = fake_urlopen(monkeypatch, [CUT, CUT, "ok"])
     with pytest.raises(RuntimeError) as excinfo:
         rag.call_llm("p", rag.DEFAULT_MODEL, "k")
-    assert "max_tokens=600" in str(excinfo.value) and rag.DEFAULT_MODEL in str(excinfo.value)
+    assert f"max_tokens={rag.LENGTH_RETRY_TOKENS}" in str(excinfo.value) and rag.DEFAULT_MODEL in str(excinfo.value)
+    assert len(calls) == 2
+
+
+def test_call_llm_raises_at_once_when_a_large_budget_is_used_up(monkeypatch):
+    calls = fake_urlopen(monkeypatch, [CUT, "ok"])
+    with pytest.raises(RuntimeError):
+        rag.call_llm("p", rag.DEFAULT_MODEL, "k", max_tokens=rag.LENGTH_RETRY_TOKENS)
     assert len(calls) == 1
 
 

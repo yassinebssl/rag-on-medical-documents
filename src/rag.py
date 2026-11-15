@@ -31,6 +31,7 @@ CANDIDATES = 20  # chunks taken from each ranking before fusion in hybrid mode
 SIM_THRESHOLD = 0.6  # the brief's value; calibrate on the eval set before reporting
 RERANK_THRESHOLD = 0.5  # cross-encoder gate: the model's own boundary (logit 0), not tuned on the eval set
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
+LENGTH_RETRY_TOKENS = 4000  # budget of the one resend after a reasoning model used max_tokens up
 FREE_MODELS = [
     "nvidia/nemotron-3-ultra-550b-a55b:free",
     "google/gemma-4-31b-it:free",
@@ -86,15 +87,17 @@ def call_llm(prompt, model, api_key, retries=4, max_tokens=600):
 
     If every reply is empty, raise RuntimeError; it carries the last reply's `error`
     field when the JSON body has one (a 200 reply can hold a provider error).
-    An empty reply cut at max_tokens raises at once: a reasoning model spent the whole
-    budget on hidden reasoning, and a retry at temperature 0 would do the same.
+    An empty reply cut at max_tokens means a reasoning model spent the whole budget on
+    hidden reasoning, and the same request at temperature 0 would do the same: it is
+    sent once more at once with LENGTH_RETRY_TOKENS, and raises if that is cut too (or
+    if max_tokens was already that large). A reply that fits in max_tokens is unchanged.
     """
     check_free(model)
-    body = json.dumps({"model": model, "messages": [{"role": "user", "content": prompt}],
-                       "max_tokens": max_tokens, "temperature": 0}).encode("utf-8")
     headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
     error = None
     for attempt in range(retries):
+        body = json.dumps({"model": model, "messages": [{"role": "user", "content": prompt}],
+                           "max_tokens": max_tokens, "temperature": 0}).encode("utf-8")
         req = urllib.request.Request(OPENROUTER_URL, data=body, headers=headers)
         try:
             with urllib.request.urlopen(req, timeout=180) as resp:
@@ -104,7 +107,10 @@ def call_llm(prompt, model, api_key, retries=4, max_tokens=600):
             if text.strip():
                 return text
             if choice.get("finish_reason") == "length":
-                raise RuntimeError(f"{model} used all max_tokens={max_tokens} before writing an answer")
+                if max_tokens >= LENGTH_RETRY_TOKENS:
+                    raise RuntimeError(f"{model} used all max_tokens={max_tokens} before writing an answer")
+                max_tokens = LENGTH_RETRY_TOKENS
+                continue
             error = data.get("error")
         except urllib.error.HTTPError as exc:
             if exc.code == 429:
