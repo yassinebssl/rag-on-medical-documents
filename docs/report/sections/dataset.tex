@@ -31,7 +31,7 @@ Two WHO files were replaced: a scan with no text layer (10 pages, 0 characters),
   \item \textbf{The brief's own chunking gives this count.} With 512-token windows and 102 tokens of overlap, the corpus gives 3,410 chunks. Removing the overlap still gives 3,164. Getting under 2,000 would take windows of about 1,024 tokens with no overlap (1,913 chunks), twice the brief's chunk size.
   \item \textbf{Pages are kept apart so that every WHO chunk cites one page.} A window never spans two pages, so a page adds at least one chunk. The median WHO page has 584 tokens, just over one window, so at least half the pages give two chunks or more; only 553 of the 1,530 records fit in one.
   \item \textbf{Cutting documents would cut evidence.} The 19 documents that hold the evidence for the 20 answerable questions give 2,150 chunks on their own. No set of documents under 2,000 chunks keeps the evidence for every answerable question.
-  \item \textbf{The cost stays small.} The index is built once, in about 3 hours on a laptop CPU, and the build resumes after an interruption. On this index of 3,410 chunks, hybrid retrieval takes 0.22\,s per question (Table~\ref{tab:retrieval}).
+  \item \textbf{The cost stays small.} The index is built once, in about 3 hours on a laptop CPU, and the build resumes after an interruption. On this index of 3,410 chunks, hybrid retrieval takes 0.16\,s per question (Table~\ref{tab:retrieval}).
 \end{itemize}
 The counts for other window sizes were computed from the same records and tokenizer (2026-11-15); no index was built with them.
 

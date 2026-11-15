@@ -30,8 +30,10 @@ SUMMARY_CAPTION = ("Evaluation of each system and model (from \\texttt{results/s
                    "Ref.~N: share of the held-out questions N01--N10 refused. Hit: share of answerable questions with "
                    "a passage from the expected source. CP: context precision. Faith.: faithfulness, with the number "
                    "of judged answers in brackets. Lat.: mean seconds per answer. -- means no value.")
-RETRIEVAL_CAPTION = ("Retrieval and gate comparison on the original 30 questions, with no LLM call (from "
-                     "\\texttt{results/retrieval.csv}). BM25 is the keyword baseline. \\emph{+name} rows reorder the 20 "
+RETRIEVAL_CAPTION = ("Retrieval and gate comparison, with no LLM call (from \\texttt{results/retrieval.csv}). "
+                     "Hit rates and context precision are on the 20 answerable questions; auroc, margin and gap\\_share "
+                     "separate them from the 10 out-of-corpus ones, the heldout columns from the 10 held-out ones. "
+                     "BM25 is the keyword baseline. \\emph{+name} rows reorder the 20 "
                      "fused candidates with a cross-encoder; \\emph{\\_gate} rows keep the hybrid passages and use the "
                      "cross-encoder score only for the refusal gate. The margin is in the units of each score "
                      "(cosine, BM25 score, cross-encoder logit or probability); gap\\_share divides it by the score range.")

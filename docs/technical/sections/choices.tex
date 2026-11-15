@@ -23,7 +23,7 @@ found all 20 evidence quotes of the answerable questions on their recorded page 
 The brief names it, and our architecture note chose it as multilingual and strong on medical
 text. On the answerable questions,
 dense retrieval alone finds the right document for 19 of 20 (hit rate 0.95) and the evidence page
-for 16 (page hit rate 0.80), with a context precision of 0.857, in 185\,ms per question. Its best
+for 16 (page hit rate 0.80), with a context precision of 0.857, in 144\,ms per question. Its best
 similarity also separates the questions: every answerable question scores above every out-of-corpus
 one (AUROC 1.0). The cost is the build: about 3\,s per chunk on a laptop CPU and about 3 hours in
 all, after a 2\,GB download. This is why the build is resumable.
@@ -38,11 +38,11 @@ converts to a similarity with $1 - d$ and the threshold compares like with like
 The course asks for two baselines, and BM25 is one of them (\code{bm25_rag}). We wrote it with the
 standard library, after two build-your-own-x tutorials, so that we know every line. BM25 catches
 exact strings, such as a drug name, that embeddings can miss. Alone, it finds the most evidence
-pages (page hit rate 0.95, context precision 0.932, 7\,ms), but its score cannot gate: it has no
+pages (page hit rate 0.95, context precision 0.932, 9\,ms), but its score cannot gate: it has no
 fixed scale, and an out-of-corpus question can outscore an answerable one (AUROC 0.945, negative
 margin). Fusion by rank needs no common scale. Hybrid retrieval raises the page hit rate from 0.80
 to 0.90 and context precision from 0.857 to 0.911 over dense alone, with a hit rate of 1.0, in
-0.22\,s per question. The similarity gate keeps using the best dense similarity, because BM25 hits
+0.16\,s per question. The similarity gate keeps using the best dense similarity, because BM25 hits
 carry none.
 
 \paragraph{A cross-encoder as the refusal gate, not as a reorderer.}
@@ -54,14 +54,14 @@ and scores whether the passage answers it. We compared three as a gate over the 
 passages, each at its own 0.5 boundary:
 \begin{itemize}[leftmargin=1.5em]
   \item MiniLM (\code{ms-marco-MiniLM-L6-v2}) answers all 20 answerable questions (lowest 0.870) and
-        refuses all 10 out-of-corpus ones (highest 0.156, O06), in about 0.8\,s per question.
+        refuses all 10 out-of-corpus ones (highest 0.156, O06), in about 0.6\,s per question.
   \item MedCPT lets ``Who painted the Mona Lisa?'' through (0.78) and takes about 3\,s.
   \item bge-reranker-v2-m3 lets the multiple sclerosis question through (0.85) and takes about 11\,s.
 \end{itemize}
 MiniLM is the only one that separates the 30 questions at an untuned threshold, and it is the
 fastest. As a reorderer of the 20 fused candidates, against hybrid alone (page hit rate 0.90):
-MedCPT found fewer evidence pages (0.80, 14.7\,s), MiniLM as many (0.90, 2.2\,s), and
-bge-reranker-v2-m3 one more (0.95) at about 46\,s per question. One page in 20 does not pay for 46\,s
+MedCPT found fewer evidence pages (0.80, 13.1\,s), MiniLM as many (0.90, 2.1\,s), and
+bge-reranker-v2-m3 one more (0.95) at about 50\,s per question. One page in 20 does not pay for 50\,s
 per question, and that model cannot gate, so the cross-encoder only gates. Both the dense similarity
 and MiniLM rank every answerable question above every out-of-corpus one, so on these 30 questions
 the gain is the untuned threshold and the room around it, not a better ranking.

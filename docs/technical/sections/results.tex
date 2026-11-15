@@ -40,9 +40,10 @@ alone, with a context precision of 0.911 against 0.857. BM25 alone finds the mos
 cannot gate. Figure~\ref{fig:separation} shows, for each of the 30 questions, the two scores the
 gates use. Both scores put every answerable question above every out-of-corpus one; the dense
 similarity leaves a gap of 0.036 around its threshold (0.6235 against 0.5878), the cross-encoder a
-gap from 0.156 to 0.870 around 0.5. The \code{heldout_auroc} and \code{heldout_margin} columns need a
-new run of \code{evaluate.py retrieval} on the 40 questions. \TODO{rerun \code{evaluate.py retrieval}
-and report the held-out separation}
+gap from 0.156 to 0.870 around 0.5. On the held-out questions, chosen for nothing, the separation
+is weaker: the MiniLM gate reaches \code{heldout_auroc} 0.955 and lets 5 of the 10 reach 0.5
+(N02, N04, N06, N08, N10), the dense similarity lets 3 through 0.6 (auroc 0.95). The model's own
+refusal is the second line of defence (report, Section~6).
 
 \IfFileExists{\gen/retrieval_table.tex}{\input{\gen/retrieval_table.tex}}{\TODO{retrieval table: \code{docs/report/generated/retrieval_table.tex}, from \code{results/retrieval.csv}}}
 
@@ -102,13 +103,13 @@ the model call dominates the time of an answer.
     \toprule
     Step (CPU, per question unless stated) & Time \\
     \midrule
-    Dense retrieval, top 5 & 185\,ms \\
-    BM25, top 5 & 7\,ms \\
-    Hybrid retrieval (dense 20 + BM25 20, fused) & 0.22\,s \\
+    Dense retrieval, top 5 & 144\,ms \\
+    BM25, top 5 & 9\,ms \\
+    Hybrid retrieval (dense 20 + BM25 20, fused) & 0.16\,s \\
     Hybrid + MiniLM gate, five passages in one batch (comparison) & 0.8\,s \\
     Hybrid + MiniLM gate with early stop (app): answerable / out of corpus & about 0.3\,s / 0.5\,s \\
     Gate with MedCPT / bge-reranker-v2-m3 & about 3\,s / 11\,s \\
-    Reordering 20 candidates: MiniLM / MedCPT / bge-reranker-v2-m3 & 2.2\,s / 14.7\,s / about 46\,s \\
+    Reordering 20 candidates: MiniLM / MedCPT / bge-reranker-v2-m3 & 2.1\,s / 13.1\,s / about 50\,s \\
     Model call (mean latency per answer, \code{summary.csv}) & \TODO{from summary table} \\
     Embedding the corpus with BGE-M3 (once) & about 3\,s per chunk, about 3\,h \\
     \bottomrule
