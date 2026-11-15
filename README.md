@@ -70,9 +70,12 @@ Evaluate the systems:
 - `--judge`: also scores faithfulness, with one extra LLM call per answered question that has passages. The faithfulness of a record is only scored in the run that creates the record, so give `--judge` from the first run. A failed judge call leaves that record's faithfulness empty.
 - `--limit N`: keeps only the first N questions of the set. The set starts with the 20 answerable questions, so a small N contains no out-of-corpus question.
 
+An identical request is sent to OpenRouter once. Every LLM call of the run, answers and judge, goes through a cache, `results/llm_cache.jsonl`: when the model, the prompt and the token budget are the same as in an earlier call, the stored reply is used and no request is sent. `rag_hybrid` and `rag_rerank` retrieve the same passages, so for a question that both gates let through, the second system reuses the answer and the judge reply of the first, and the two systems differ only by their gate. The run prints `reply reused` for such an answer, its record has `reused` set to true, and its latency includes the seconds the original call took. The cache is kept between runs. To get new replies from the models, delete `results/llm_cache.jsonl` together with `results/records.jsonl`.
+
 The run is resumable: every answer is appended to `results/records.jsonl`, and a rerun skips what is already there. A call that fails is printed and not recorded, so a rerun retries it. Each record stores the threshold it was made with. After the run, these files are written in `results/`:
 
 - `records.jsonl`: one line per answer.
+- `llm_cache.jsonl`: one line per model reply, stored under the SHA-256 of its request with the seconds the call took. It holds neither the prompt nor the API key. A call that fails is not stored.
 - `summary.csv`: one row of metrics per system and model, computed from all the records in `records.jsonl`.
 - `human_rating_sheet.csv`: each answer next to its expected answer (the ground truth, or the refusal sentence for an out-of-corpus question), with `correct_0_1`, `safety_1_5` and `clarity_1_5` columns, to be filled by hand. `correct_0_1` is the only check of an answer against the ground truth, and the only one that covers the `no_rag` baseline. A rerun keeps the ratings already typed for answers that did not change, and leaves the other rows empty.
 
@@ -146,7 +149,7 @@ Metrics, per system and model (columns of `summary.csv`):
 - `context_precision`: for each answerable question, the mean of precision@k over the ranks k that hold a relevant passage (0 if none), averaged over the questions. A passage is relevant when its source is the question's source. Empty for `no_rag`.
 - `faithfulness`: with `--judge`, for each answered question that has passages, one judge call (always the first model of `FREE_MODELS`) counts the claims of the answer and how many the passages fully support. The score is supported claims divided by all claims, averaged over the answers where the judge replied in a readable form with a supported count between 0 and the total. Empty without `--judge`.
 - `n_judged`: number of records that have a faithfulness score.
-- `mean_latency_s`: mean time per answer in seconds.
+- `mean_latency_s`: mean time per answer in seconds. For an answer that reused a stored reply, the time includes the seconds the original call took.
 
 Context precision and faithfulness follow the RAGAS definitions, but they are computed by `src/evaluate.py`, not by the `ragas` package. Context precision uses the relevance labels of the question set instead of an LLM judge.
 
@@ -161,7 +164,7 @@ Results are written to results/summary.csv by the evaluation run.
 - The corpus is small (50 documents), so many real questions are outside it and are refused.
 - The free models are rate-limited and slow, and a call can fail or return an empty reply. The code retries and pauses, and the app shows the error instead of crashing.
 - Each gate is a single number. A value that is too high refuses answerable questions, and one that is too low lets weakly related passages through. The cross-encoder gate separates the 30 questions more widely than the similarity gate, but 30 questions are few, and the cross-encoder was trained on web search, not on medicine.
-- The corpus contains no patient data. Questions are sent to OpenRouter with the retrieved passages, so do not type anything that identifies a patient. The evaluation stores its questions and answers in `results/records.jsonl`.
+- The corpus contains no patient data. Questions are sent to OpenRouter with the retrieved passages, so do not type anything that identifies a patient. The evaluation stores its questions and answers in `results/records.jsonl`, and the replies of the models in `results/llm_cache.jsonl`.
 
 ## Tools and sources
 

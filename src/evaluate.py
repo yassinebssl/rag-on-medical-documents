@@ -29,6 +29,7 @@ human_rating_sheet.csv and threshold_sweep.csv.
 """
 import argparse
 import csv
+import hashlib
 import json
 import os
 import re
@@ -132,7 +133,43 @@ def load_records(path):
         return [json.loads(line) for line in fh if line.strip()]
 
 
-def run_questions(questions, systems, models, ctx, api_key, threshold, judge, out_path, runner=run_system):
+class ReplyCache:
+    """Wrap rag.call_llm so that an identical request is sent to OpenRouter once.
+
+    Two requests are identical when the model, the prompt and the keyword arguments
+    (max_tokens) are the same. rag_hybrid and rag_rerank retrieve the same passages, so
+    for a question that both gates let through they would send the same prompt, and then
+    the same judge prompt: the second system reuses the first one's replies. The free
+    tier allows few requests a day, and with one reply for both, the two systems differ
+    only by their gate.
+
+    Each reply is appended to a JSONL file under the SHA-256 of its request, with the
+    seconds the call took, so a run on a later day reuses it too. The file holds neither
+    the prompt nor the API key. A call that raises is not stored. reused_s adds up the
+    stored seconds of the replies reused since it was last set to 0.
+    """
+
+    def __init__(self, path, call, clock=time.time):
+        """Load the replies already in the file; `call` is the function that sends a request."""
+        self.path, self.call, self.clock, self.reused_s = path, call, clock, 0.0
+        self.replies = {r["key"]: r for r in load_records(path)}
+
+    def __call__(self, prompt, model, api_key, **kwargs):
+        """Return the stored reply of this request, or send it and store the reply."""
+        key = hashlib.sha256(json.dumps([model, prompt, kwargs], sort_keys=True).encode("utf-8")).hexdigest()
+        if key in self.replies:
+            self.reused_s += self.replies[key]["seconds"]
+            return self.replies[key]["reply"]
+        t0 = self.clock()
+        reply = self.call(prompt, model, api_key, **kwargs)
+        self.replies[key] = {"key": key, "reply": reply, "seconds": self.clock() - t0}
+        with open(self.path, "a", encoding="utf-8") as fh:
+            fh.write(json.dumps(self.replies[key], ensure_ascii=False) + "\n")
+        return reply
+
+
+def run_questions(questions, systems, models, ctx, api_key, threshold, judge, out_path, runner=run_system,
+                  cache=None):
     """Run every (system, model, question) not yet in out_path, appending one JSON line each.
 
     Each record stores the threshold. If out_path already holds a record made at
@@ -142,6 +179,9 @@ def run_questions(questions, systems, models, ctx, api_key, threshold, judge, ou
     judge model is always rag.DEFAULT_MODEL, one fixed judge for every system and
     every evaluated model. A failing judge call prints the error and the record is
     written with faithfulness None; the latency does not include the judge call.
+    With cache (the ReplyCache the LLM calls go through), a record whose answer reused
+    a stored reply has reused True, and its latency includes the seconds the original
+    call took, so that it stays the time the system needs for the question.
     Returns all records in the file.
     """
     old = load_records(out_path)
@@ -155,13 +195,16 @@ def run_questions(questions, systems, models, ctx, api_key, threshold, judge, ou
             for q in questions:
                 if (system, model, q["id"]) in done:
                     continue
+                if cache:
+                    cache.reused_s = 0.0
                 t0 = time.time()
                 try:
                     res = runner(system, q["question"], ctx, model, api_key, threshold)
                 except Exception as exc:  # keep going if one free model is down
                     print(f"{system} {model} {q['id']}: error: {exc}", flush=True)
                     continue
-                latency = time.time() - t0
+                reused_s = cache.reused_s if cache else 0.0
+                latency = time.time() - t0 + reused_s
                 faith = None
                 if judge and res["hits"] and not res["refused"]:
                     try:
@@ -174,10 +217,11 @@ def run_questions(questions, systems, models, ctx, api_key, threshold, judge, ou
                           "rerank_score": res.get("rerank_score"),
                           "latency_s": round(latency, 2), "sources": [rag.source_label(h) for h in res["hits"]],
                           "relevant": [h["source"] == q["source"] for h in res["hits"]],
-                          "faithfulness": faith, "threshold": threshold}
+                          "faithfulness": faith, "threshold": threshold, "reused": reused_s > 0}
                 with open(out_path, "a", encoding="utf-8") as fh:
                     fh.write(json.dumps(record, ensure_ascii=False) + "\n")
-                print(f"{system} {model} {q['id']}: {res['reason']} ({latency:.1f}s)", flush=True)
+                print(f"{system} {model} {q['id']}: {res['reason']} ({latency:.1f}s"
+                      f"{', reply reused' if reused_s else ''})", flush=True)
     return load_records(out_path)
 
 
@@ -417,8 +461,13 @@ def run(systems, models, judge, limit):
     ctx = rag.load_context()
     questions = load_questions()[:limit]
     os.makedirs(RESULTS, exist_ok=True)
-    records = run_questions(questions, systems, models, ctx, ctx["api_key"], rag.SIM_THRESHOLD, judge,
-                            os.path.join(RESULTS, "records.jsonl"))
+    call_llm = rag.call_llm
+    cache = rag.call_llm = ReplyCache(os.path.join(RESULTS, "llm_cache.jsonl"), call_llm)
+    try:  # every LLM call of the run, answers and judge, goes through the cache
+        records = run_questions(questions, systems, models, ctx, ctx["api_key"], rag.SIM_THRESHOLD, judge,
+                                os.path.join(RESULTS, "records.jsonl"), cache=cache)
+    finally:
+        rag.call_llm = call_llm
     if not records:
         raise SystemExit("no finished records")
     rows = summarize(records)

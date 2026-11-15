@@ -230,3 +230,110 @@ def test_run_system_rag_rerank_uses_bm25_and_the_reranker(monkeypatch):
     ev.run_system("rag_rerank", "q", {"embedder": None, "collection": None, "bm25": "B", "reranker": "R"},
                   "m:free", "k", 0.6)
     assert (seen["bm25"], seen["reranker"]) == ("B", "R") and "rag_rerank" in ev.SYSTEMS
+
+
+class FakeLLM:
+    """Stands in for rag.call_llm: records each request and replies with its number."""
+
+    def __init__(self):
+        """Start with no request."""
+        self.requests = []
+
+    def __call__(self, prompt, model, api_key, **kwargs):
+        """Record the request and return 'reply 1', 'reply 2', ..."""
+        self.requests.append((prompt, model, kwargs))
+        return f"reply {len(self.requests)}"
+
+
+def test_reply_cache_sends_an_identical_request_once(tmp_path):
+    llm = FakeLLM()
+    cache = ev.ReplyCache(str(tmp_path / "cache.jsonl"), llm)
+    assert [cache("Dose?", "m:free", "k"), cache("Dose?", "m:free", "k")] == ["reply 1", "reply 1"]
+    assert len(llm.requests) == 1
+
+
+def test_reply_cache_sends_a_request_that_differs_in_prompt_model_or_token_budget(tmp_path):
+    llm = FakeLLM()
+    cache = ev.ReplyCache(str(tmp_path / "cache.jsonl"), llm)
+    replies = [cache("Dose?", "m:free", "k"), cache("Course?", "m:free", "k"), cache("Dose?", "n:free", "k"),
+               cache("Dose?", "m:free", "k", max_tokens=4000)]
+    assert replies == ["reply 1", "reply 2", "reply 3", "reply 4"]
+    assert llm.requests[3] == ("Dose?", "m:free", {"max_tokens": 4000})
+
+
+def test_reply_cache_reuses_the_replies_of_an_earlier_run(tmp_path):
+    path = str(tmp_path / "cache.jsonl")
+    ev.ReplyCache(path, FakeLLM())("Dose?", "m:free", "k")
+    later = FakeLLM()
+    assert ev.ReplyCache(path, later)("Dose?", "m:free", "k") == "reply 1" and later.requests == []
+
+
+def test_reply_cache_file_holds_neither_the_api_key_nor_the_prompt(tmp_path):
+    path = tmp_path / "cache.jsonl"
+    ev.ReplyCache(str(path), FakeLLM())("What is the dose of paracetamol?", "m:free", "secret-key")
+    stored = path.read_text(encoding="utf-8")
+    assert "reply 1" in stored and "secret-key" not in stored and "paracetamol" not in stored
+
+
+def test_reply_cache_does_not_store_a_failed_call(tmp_path):
+    path = tmp_path / "cache.jsonl"
+    with pytest.raises(ZeroDivisionError):
+        ev.ReplyCache(str(path), lambda *a, **k: 1 / 0)("Dose?", "m:free", "k")
+    llm = FakeLLM()
+    assert ev.ReplyCache(str(path), llm)("Dose?", "m:free", "k") == "reply 1" and len(llm.requests) == 1
+
+
+def test_reply_cache_adds_up_the_seconds_the_reused_replies_took(tmp_path):
+    clock = iter([10.0, 13.5])   # the one real call starts at 10.0 and ends at 13.5
+    cache = ev.ReplyCache(str(tmp_path / "cache.jsonl"), FakeLLM(), clock=lambda: next(clock))
+    cache("Dose?", "m:free", "k")
+    assert cache.reused_s == 0.0
+    cache("Dose?", "m:free", "k")
+    cache("Dose?", "m:free", "k")
+    assert cache.reused_s == 7.0
+
+
+def test_a_reused_answer_is_marked_and_its_latency_includes_the_original_call(tmp_path):
+    clock = iter([0.0, 3.0])
+    cache = ev.ReplyCache(str(tmp_path / "cache.jsonl"), FakeLLM(), clock=lambda: next(clock))
+
+    def runner(system, question, ctx, model, api_key, threshold):
+        """Send the same prompt for both systems, as rag_hybrid and rag_rerank do."""
+        return {**answer(), "answer": cache(question, model, api_key)}
+
+    records = ev.run_questions(QUESTIONS[:1], ["rag_hybrid", "rag_rerank"], ["m:free"], {}, "k", 0.6, False,
+                               str(tmp_path / "records.jsonl"), runner, cache=cache)
+    assert [(r["system"], r["answer"], r["reused"]) for r in records] == [
+        ("rag_hybrid", "reply 1", False), ("rag_rerank", "reply 1", True)]
+    assert records[0]["latency_s"] < 1.0 and 3.0 <= records[1]["latency_s"] < 4.0
+
+
+def test_a_reused_judge_reply_does_not_count_in_the_latency(tmp_path, monkeypatch):
+    clock = iter([0.0, 3.0])
+    cache = ev.ReplyCache(str(tmp_path / "cache.jsonl"), lambda *a, **k: '{"supported": 1, "total": 2}',
+                          clock=lambda: next(clock))
+    monkeypatch.setattr(rag, "call_llm", cache)
+    records = ev.run_questions(QUESTIONS[:1], ["rag_hybrid", "rag_rerank"], ["m:free"], {}, "k", 0.6, True,
+                               str(tmp_path / "records.jsonl"), answer, cache=cache)
+    assert [(r["faithfulness"], r["reused"]) for r in records] == [(0.5, False), (0.5, False)]
+    assert records[1]["latency_s"] < 1.0
+
+
+def test_run_sends_every_llm_call_through_a_reply_cache_in_results(tmp_path, monkeypatch):
+    llm, seen = FakeLLM(), {}
+    monkeypatch.setattr(rag, "call_llm", llm)
+    monkeypatch.setattr(rag, "load_context", lambda: {"api_key": "k"})
+    monkeypatch.setattr(ev, "RESULTS", str(tmp_path / "results"))
+
+    def fake_run_questions(*args, cache):
+        """Make the same request twice through rag.call_llm and keep the cache."""
+        seen["replies"] = [rag.call_llm("Dose?", "m:free", "k"), rag.call_llm("Dose?", "m:free", "k")]
+        seen["installed"] = rag.call_llm is cache
+        return []
+
+    monkeypatch.setattr(ev, "run_questions", fake_run_questions)
+    with pytest.raises(SystemExit):   # no finished records
+        ev.run(["rag_dense"], ["m:free"], False, 1)
+    assert seen["replies"] == ["reply 1", "reply 1"] and len(llm.requests) == 1
+    assert seen["installed"] and (tmp_path / "results" / "llm_cache.jsonl").exists()
+    assert rag.call_llm is llm   # the run puts rag.call_llm back
