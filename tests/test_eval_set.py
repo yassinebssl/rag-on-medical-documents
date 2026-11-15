@@ -7,12 +7,13 @@ with open(os.path.join(ROOT, "data", "eval", "questions.json"), encoding="utf-8"
     qs = json.load(fh)
 
 
-def test_eval_set_has_20_answerable_and_10_out_of_corpus():
-    assert [q["id"] for q in qs] == [f"A{i:02d}" for i in range(1, 21)] + [f"O{i:02d}" for i in range(1, 11)]
+def test_eval_set_has_20_answerable_10_out_of_corpus_and_10_near_domain():
+    assert [q["id"] for q in qs] == ([f"A{i:02d}" for i in range(1, 21)] + [f"O{i:02d}" for i in range(1, 11)]
+                                     + [f"N{i:02d}" for i in range(1, 11)])
     assert all(set(q) == {"id", "question", "answerable", "ground_truth", "source", "page", "evidence"} for q in qs)
     assert all(q["answerable"] is (q["id"][0] == "A") for q in qs)
     assert all(q["question"].strip().endswith("?") for q in qs)
-    assert len({q["question"] for q in qs}) == 30
+    assert len({q["question"] for q in qs}) == 40
 
 
 def test_answerable_questions_carry_evidence_and_the_others_do_not():

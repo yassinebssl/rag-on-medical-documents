@@ -268,5 +268,95 @@
     "source": null,
     "page": null,
     "evidence": null
+  },
+  {
+    "id": "N01",
+    "question": "What is the mechanism of action of baxdrostat?",
+    "answerable": false,
+    "ground_truth": null,
+    "source": null,
+    "page": null,
+    "evidence": null
+  },
+  {
+    "id": "N02",
+    "question": "Which type of thyroid cancer is a contraindication to GLP-1 receptor agonists?",
+    "answerable": false,
+    "ground_truth": null,
+    "source": null,
+    "page": null,
+    "evidence": null
+  },
+  {
+    "id": "N03",
+    "question": "Which thiazolidinedione was withdrawn from the market because of severe liver toxicity?",
+    "answerable": false,
+    "ground_truth": null,
+    "source": null,
+    "page": null,
+    "evidence": null
+  },
+  {
+    "id": "N04",
+    "question": "Which drug did the REDUCE-IT trial test in statin-treated patients with raised triglycerides?",
+    "answerable": false,
+    "ground_truth": null,
+    "source": null,
+    "page": null,
+    "evidence": null
+  },
+  {
+    "id": "N05",
+    "question": "How many doses make up the RTS,S/AS01 malaria vaccine schedule?",
+    "answerable": false,
+    "ground_truth": null,
+    "source": null,
+    "page": null,
+    "evidence": null
+  },
+  {
+    "id": "N06",
+    "question": "What tuberculin skin test induration is considered positive in a person living with HIV?",
+    "answerable": false,
+    "ground_truth": null,
+    "source": null,
+    "page": null,
+    "evidence": null
+  },
+  {
+    "id": "N07",
+    "question": "Which genetic test should be done before starting abacavir?",
+    "answerable": false,
+    "ground_truth": null,
+    "source": null,
+    "page": null,
+    "evidence": null
+  },
+  {
+    "id": "N08",
+    "question": "What daily dose of aspirin is recommended to prevent pre-eclampsia in women at high risk?",
+    "answerable": false,
+    "ground_truth": null,
+    "source": null,
+    "page": null,
+    "evidence": null
+  },
+  {
+    "id": "N09",
+    "question": "Which cytochrome P450 enzyme mainly converts paracetamol into its toxic metabolite NAPQI?",
+    "answerable": false,
+    "ground_truth": null,
+    "source": null,
+    "page": null,
+    "evidence": null
+  },
+  {
+    "id": "N10",
+    "question": "What is the target maintenance dose of sotatercept in pulmonary arterial hypertension?",
+    "answerable": false,
+    "ground_truth": null,
+    "source": null,
+    "page": null,
+    "evidence": null
   }
 ]
