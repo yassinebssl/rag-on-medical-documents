@@ -68,6 +68,10 @@ def load_env(path=os.path.join(ROOT, ".env")):
     return env
 
 
+class QuotaExhausted(RuntimeError):
+    """The account's daily free-model requests are used up; a retry before 00:00 UTC fails too."""
+
+
 def check_free(model):
     """Raise unless the model is one of the free OpenRouter models."""
     if not (model.endswith(":free") or model == "openrouter/free"):
@@ -76,6 +80,9 @@ def check_free(model):
 
 def call_llm(prompt, model, api_key, retries=4, max_tokens=600):
     """Send one chat request to OpenRouter. Retries empty replies, 429 and 5xx with growing pauses.
+
+    A 429 whose body names the free-models-per-day limit raises QuotaExhausted at once,
+    with no retry and no pause.
 
     If every reply is empty, raise RuntimeError; it carries the last reply's `error`
     field when the JSON body has one (a 200 reply can hold a provider error).
@@ -100,6 +107,14 @@ def call_llm(prompt, model, api_key, retries=4, max_tokens=600):
                 raise RuntimeError(f"{model} used all max_tokens={max_tokens} before writing an answer")
             error = data.get("error")
         except urllib.error.HTTPError as exc:
+            if exc.code == 429:
+                try:
+                    detail = exc.read().decode("utf-8", "replace")
+                except Exception:  # no or unreadable body: an ordinary 429
+                    detail = ""
+                if "free-models-per-day" in detail:
+                    raise QuotaExhausted("the daily free-model limit of the OpenRouter account is used up; "
+                                         "it resets at 00:00 UTC") from exc
             if not (exc.code == 429 or exc.code >= 500) or attempt == retries - 1:
                 raise
         if attempt < retries - 1:

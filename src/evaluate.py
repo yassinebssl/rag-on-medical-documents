@@ -1,4 +1,4 @@
-"""Evaluate four systems on data/eval/questions.json and calibrate the refusal threshold.
+"""Evaluate five systems on data/eval/questions.json and calibrate the refusal threshold.
 
 Systems:
 - rag_dense: rag.answer_question (BGE-M3 retrieval, similarity gate, cited answer)
@@ -8,24 +8,27 @@ Systems:
 - no_rag: the LLM alone, with no passages (refuses only if the model says the refusal sentence)
 
 Metrics per (system, model): answer_rate on answerable questions, refusal_rate on
-out-of-corpus questions, hit_rate (at least one passage from the expected source),
-context_precision, faithfulness (with n_judged, the number of records it is
-averaged over) and mean latency.
+out-of-corpus questions, heldout_refusal_rate on held-out questions (id starting with
+"N": near-domain questions the corpus cannot answer, used to choose no threshold),
+hit_rate (at least one passage from the expected source), context_precision,
+faithfulness (with n_judged, the number of records it is averaged over) and mean
+latency.
 
 Context precision follows the RAGAS formula (Es et al., "RAGAS: Automated Evaluation
 of Retrieval Augmented Generation", 2023), with document-level relevance labels from
 the eval set (a passage is relevant when its source is the question's source) instead
 of an LLM judge. Faithfulness follows the RAGAS definition (supported claims / all
 claims), with one judge call per answered record that has passages, made in the
-run that creates the record; a failed judge call leaves that record's faithfulness
-empty. The `ragas` package itself is not used.
+run that creates the record; a failed judge call writes no record, so a later run
+answers from the reply cache and judges again. The `ragas` package itself is not used.
 
 Usage:
     .venv/bin/python src/evaluate.py sweep
     .venv/bin/python src/evaluate.py run [--systems a,b] [--models m1,m2|all] [--judge] [--limit N]
+    .venv/bin/python src/evaluate.py retrieval [--rerankers medcpt,bge,minilm]
 
 Outputs in results/: records.jsonl (one line per answer, resumable), summary.csv,
-human_rating_sheet.csv and threshold_sweep.csv.
+human_rating_sheet.csv, threshold_sweep.csv, retrieval.csv and retrieval_questions.csv.
 """
 import argparse
 import csv
@@ -61,6 +64,11 @@ Passages:
 
 Answer:
 {answer}"""
+
+
+def heldout(item):
+    """Return True for a held-out question or record: its id starts with "N"."""
+    return item["id"].startswith("N")
 
 
 def run_system(system, question, ctx, model, api_key, threshold):
@@ -126,11 +134,24 @@ def judge_faithfulness(answer, hits, model, api_key):
 
 
 def load_records(path):
-    """Return the records already written to the JSONL file (none if it does not exist)."""
+    """Return the records already written to the JSONL file (none if it does not exist).
+
+    A line that is not valid JSON (an append cut short by a crash) is skipped, with
+    one printed warning for the file.
+    """
     if not os.path.exists(path):
         return []
+    records, torn = [], 0
     with open(path, encoding="utf-8") as fh:
-        return [json.loads(line) for line in fh if line.strip()]
+        for line in fh:
+            if line.strip():
+                try:
+                    records.append(json.loads(line))
+                except json.JSONDecodeError:
+                    torn += 1
+    if torn:
+        print(f"warning: skipped {torn} line(s) of {path} that are not valid JSON", flush=True)
+    return records
 
 
 class ReplyCache:
@@ -175,10 +196,15 @@ def run_questions(questions, systems, models, ctx, api_key, threshold, judge, ou
     Each record stores the threshold. If out_path already holds a record made at
     another threshold, exit with one line before running or writing anything.
     A failing runner call prints the error and writes nothing, so a rerun retries it.
+    A model whose runner calls fail 3 questions in a row is skipped for the rest of
+    the run, for every system; a success resets its count.
     With judge, answered records that have passages get a faithfulness score; the
     judge model is always rag.DEFAULT_MODEL, one fixed judge for every system and
-    every evaluated model. A failing judge call prints the error and the record is
-    written with faithfulness None; the latency does not include the judge call.
+    every evaluated model. A failing judge call prints the error and writes nothing,
+    so a rerun takes the answer from the reply cache and sends only the judge request;
+    the latency does not include the judge call.
+    rag.QuotaExhausted (the daily free limit) from the runner or the judge stops the
+    run at once, with one printed line and no record for that question.
     With cache (the ReplyCache the LLM calls go through), a record whose answer reused
     a stored reply has reused True, and its latency includes the seconds the original
     call took, so that it stays the time the system needs for the question.
@@ -190,27 +216,41 @@ def run_questions(questions, systems, models, ctx, api_key, threshold, judge, ou
         raise SystemExit(f"{out_path} holds records made at threshold {', '.join(map(str, other))}, "
                          f"not {threshold}: move or delete the file and run again.")
     done = {(r["system"], r["model"], r["id"]) for r in old}
+    failures = {}  # model -> runner failures in a row
     for system in systems:
         for model in models:
             for q in questions:
-                if (system, model, q["id"]) in done:
+                if (system, model, q["id"]) in done or failures.get(model, 0) >= 3:
                     continue
                 if cache:
                     cache.reused_s = 0.0
                 t0 = time.time()
                 try:
                     res = runner(system, q["question"], ctx, model, api_key, threshold)
+                except rag.QuotaExhausted as exc:
+                    print(f"{system} {model} {q['id']}: stopped: {exc}; run the same command again to resume",
+                          flush=True)
+                    return load_records(out_path)
                 except Exception as exc:  # keep going if one free model is down
                     print(f"{system} {model} {q['id']}: error: {exc}", flush=True)
+                    failures[model] = failures.get(model, 0) + 1
+                    if failures[model] == 3:
+                        print(f"{model}: 3 failures in a row, skipped for the rest of this run", flush=True)
                     continue
+                failures[model] = 0
                 reused_s = cache.reused_s if cache else 0.0
                 latency = time.time() - t0 + reused_s
                 faith = None
                 if judge and res["hits"] and not res["refused"]:
                     try:
                         faith = judge_faithfulness(res["answer"], res["hits"], rag.DEFAULT_MODEL, api_key)
-                    except Exception as exc:  # keep the answer; its faithfulness stays empty
+                    except rag.QuotaExhausted as exc:
+                        print(f"{system} {model} {q['id']}: stopped: {exc}; run the same command again to resume",
+                              flush=True)
+                        return load_records(out_path)
+                    except Exception as exc:  # no record: the next run judges it again
                         print(f"{system} {model} {q['id']}: judge error: {exc}", flush=True)
+                        continue
                 record = {"system": system, "model": model, "id": q["id"], "answerable": q["answerable"],
                           "question": q["question"], "answer": res["answer"], "refused": res["refused"],
                           "reason": res["reason"], "best_similarity": res["best_similarity"],
@@ -231,19 +271,24 @@ def mean(values, digits=3):
 
 
 def summarize(records):
-    """Return one row of metrics per (system, model), in order of first appearance."""
+    """Return one row of metrics per (system, model), in order of first appearance.
+
+    refusal_rate covers the out-of-corpus records that are not held-out;
+    heldout_refusal_rate covers the held-out ones (None when there are none).
+    """
     groups = {}
     for r in records:
         groups.setdefault((r["system"], r["model"]), []).append(r)
     rows = []
     for (system, model), rs in groups.items():
         answerable = [r for r in rs if r["answerable"]]
-        out_of_corpus = [r for r in rs if not r["answerable"]]
+        out_of_corpus = [r for r in rs if not r["answerable"] and not heldout(r)]
         retrieval = system != "no_rag"
         rows.append({
             "system": system, "model": model, "n": len(rs),
             "answer_rate": mean([not r["refused"] for r in answerable]),
             "refusal_rate": mean([r["refused"] for r in out_of_corpus]),
+            "heldout_refusal_rate": mean([r["refused"] for r in rs if heldout(r)]),
             "hit_rate": mean([any(r["relevant"]) for r in answerable]) if retrieval else None,
             "context_precision": (mean([average_precision(r["relevant"]) for r in answerable])
                                   if retrieval else None),
@@ -304,10 +349,14 @@ def evaluate_retrieval(questions, retrievers):
     per retriever (hit rate and page hit rate on answerable questions, context
     precision, the separation of the best scores, mean latency) and one row per
     question with each retriever's best score and whether it found the evidence page.
+    auroc, margin and gap_share leave the held-out questions out; heldout_auroc and
+    heldout_margin separate the answerable questions from the held-out ones (None
+    when there are none).
     A PubMed article has no page, so finding the article counts as finding the page.
     """
     rows = []
     per_question = [{"id": q["id"], "answerable": q["answerable"]} for q in questions]
+    held = [heldout(q) for q in questions]
     for name, retriever in retrievers.items():
         points, hit, page_hit, precision, seconds = [], [], [], [], []
         for q, row in zip(questions, per_question):
@@ -324,8 +373,11 @@ def evaluate_retrieval(questions, retrievers):
                 page_hit.append(on_page)
                 precision.append(average_precision(relevant))
                 row[f"{name}_page_hit"] = on_page
+        other = separation([p for p, h in zip(points, held) if not h])
+        apart = separation([p for p, h in zip(points, held) if h or p[1]]) if any(held) else {}
         rows.append({"retriever": name, "hit_rate": mean(hit), "page_hit_rate": mean(page_hit),
-                     "context_precision": mean(precision), **separation(points),
+                     "context_precision": mean(precision), **other,
+                     "heldout_auroc": apart.get("auroc"), "heldout_margin": apart.get("margin"),
                      "mean_latency_ms": round(1000 * sum(seconds) / len(seconds))})
     return rows, per_question
 
@@ -372,11 +424,12 @@ def load_questions():
 def sweep():
     """Take the best dense similarity per question, score each threshold, save and print the table.
 
+    The held-out questions are left out: they play no part in choosing the threshold.
     The index comes from rag.load_context(), which exits with one line if it is missing.
     """
     ctx = rag.load_context()
     points = [(rag.retrieve(q["question"], ctx["embedder"], ctx["collection"], k=1)[0]["similarity"],
-               q["answerable"]) for q in load_questions()]
+               q["answerable"]) for q in load_questions() if not heldout(q)]
     rows = sweep_thresholds(points, THRESHOLDS)
     os.makedirs(RESULTS, exist_ok=True)
     write_csv(os.path.join(RESULTS, "threshold_sweep.csv"), rows)
@@ -483,7 +536,7 @@ def main():
     sub = parser.add_subparsers(dest="command", required=True)
     sub.add_parser("sweep", help="calibrate the similarity threshold")
     run_parser = sub.add_parser("run", help="run the systems and write the results")
-    run_parser.add_argument("--systems", default=",".join(SYSTEMS), help="comma-separated, default all four")
+    run_parser.add_argument("--systems", default=",".join(SYSTEMS), help="comma-separated, default all five")
     run_parser.add_argument("--models", help="comma-separated, or 'all' for rag.FREE_MODELS")
     run_parser.add_argument("--judge", action="store_true", help="score faithfulness with a judge LLM")
     run_parser.add_argument("--limit", type=int, help="keep the first N questions")

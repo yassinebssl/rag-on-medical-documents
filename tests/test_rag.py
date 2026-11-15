@@ -107,9 +107,13 @@ def test_check_free_rejects_paid_models():
         rag.check_free("openai/gpt-4o-mini")
 
 
-def http_error(code):
-    """Return the HTTPError urlopen raises for this status code."""
-    return urllib.error.HTTPError(rag.OPENROUTER_URL, code, "error", {}, io.BytesIO())
+def http_error(code, body=b""):
+    """Return the HTTPError urlopen raises for this status code, with this response body."""
+    return urllib.error.HTTPError(rag.OPENROUTER_URL, code, "error", {}, io.BytesIO(body))
+
+
+DAILY_LIMIT = (b'{"error":{"code":429,"message":"Rate limit exceeded: free-models-per-day. '
+               b'Add 10 credits to unlock 1000 free model requests per day"}}')
 
 
 def fake_urlopen(monkeypatch, outcomes):
@@ -138,6 +142,23 @@ def test_call_llm_retries_empty_content_then_returns_text(monkeypatch):
 
 def test_call_llm_retries_429_and_503(monkeypatch):
     calls = fake_urlopen(monkeypatch, [http_error(429), http_error(503), "ok"])
+    assert rag.call_llm("p", rag.DEFAULT_MODEL, "k") == "ok"
+    assert len(calls) == 3
+
+
+def test_call_llm_stops_at_once_when_the_daily_free_limit_is_reached(monkeypatch):
+    calls = fake_urlopen(monkeypatch, [http_error(429, DAILY_LIMIT), "ok"])
+    monkeypatch.setattr(rag.time, "sleep", lambda seconds: 1 / 0)
+    with pytest.raises(rag.QuotaExhausted) as excinfo:
+        rag.call_llm("p", rag.DEFAULT_MODEL, "k")
+    assert "daily free-model limit" in str(excinfo.value) and "00:00 UTC" in str(excinfo.value)
+    assert len(calls) == 1
+
+
+def test_call_llm_retries_a_429_whose_body_is_another_limit_or_unreadable(monkeypatch):
+    per_minute = http_error(429, b'{"error":{"code":429,"message":"Rate limit exceeded: free-models-per-min."}}')
+    unreadable = urllib.error.HTTPError(rag.OPENROUTER_URL, 429, "error", {}, None)
+    calls = fake_urlopen(monkeypatch, [per_minute, unreadable, "ok"])
     assert rag.call_llm("p", rag.DEFAULT_MODEL, "k") == "ok"
     assert len(calls) == 3
 

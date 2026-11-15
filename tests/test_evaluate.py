@@ -1,4 +1,4 @@
-"""Tests for the evaluation metrics, the four systems, the judge and resumable runs (no network)."""
+"""Tests for the evaluation metrics, the five systems, the judge and resumable runs (no network)."""
 import csv
 
 import pytest
@@ -55,11 +55,38 @@ def test_summarize_computes_rates_per_system_and_model():
                rec("no_rag", "A01", True, False, [])]
     dense, no_rag = ev.summarize(records)
     assert dense == {"system": "rag_dense", "model": "m:free", "n": 4, "answer_rate": 0.5,
-                     "refusal_rate": 0.5, "hit_rate": 0.5, "context_precision": 0.5,
+                     "refusal_rate": 0.5, "heldout_refusal_rate": None, "hit_rate": 0.5, "context_precision": 0.5,
                      "faithfulness": 0.75, "n_judged": 2, "mean_latency_s": 1.5}
     assert list(dense)[list(dense).index("faithfulness") + 1] == "n_judged"
     assert (no_rag["answer_rate"], no_rag["refusal_rate"], no_rag["hit_rate"],
             no_rag["context_precision"], no_rag["faithfulness"], no_rag["n_judged"]) == (1.0, None, None, None, None, 0)
+
+def test_summarize_reports_held_out_refusals_apart_from_out_of_corpus():
+    records = [rec("rag_dense", "A01", True, False, [True]),
+               rec("rag_dense", "O01", False, True, [False]),
+               rec("rag_dense", "O02", False, True, [False]),
+               rec("rag_dense", "N01", False, False, [False]),
+               rec("rag_dense", "N02", False, False, [False]),
+               rec("rag_dense", "N03", False, True, [False])]
+    (row,) = ev.summarize(records)
+    assert (row["n"], row["refusal_rate"], row["heldout_refusal_rate"]) == (6, 1.0, 0.333)
+    assert list(row)[list(row).index("refusal_rate") + 1] == "heldout_refusal_rate"
+
+
+def test_sweep_leaves_the_held_out_questions_out(tmp_path, monkeypatch):
+    questions = [{"id": "A01", "question": "a", "answerable": True}, {"id": "O01", "question": "o", "answerable": False},
+                 {"id": "N01", "question": "n", "answerable": False}]
+    similarity = {"a": 0.7, "o": 0.4, "n": 0.9}
+    monkeypatch.setattr(rag, "load_context", lambda: {"embedder": None, "collection": None})
+    monkeypatch.setattr(rag, "retrieve", lambda q, e, c, k: [{"similarity": similarity[q]}])
+    monkeypatch.setattr(ev, "load_questions", lambda: questions)
+    monkeypatch.setattr(ev, "RESULTS", str(tmp_path))
+    ev.sweep()
+    with open(tmp_path / "threshold_sweep.csv", newline="", encoding="utf-8") as fh:
+        rows = list(csv.DictReader(fh))
+    expected = ev.sweep_thresholds([(0.7, True), (0.4, False)], ev.THRESHOLDS)
+    assert [float(r["refusal_rate"]) for r in rows] == [r["refusal_rate"] for r in expected]
+
 
 def test_run_system_no_rag_uses_no_passages(monkeypatch):
     seen = []
@@ -129,12 +156,80 @@ def test_run_stops_when_the_file_holds_records_of_another_threshold(tmp_path):
     with open(out, encoding="utf-8") as fh:
         assert fh.read() == before
 
-def test_a_failing_judge_still_records_the_answer(tmp_path, monkeypatch, capsys):
+def test_a_failing_judge_writes_no_record_so_the_next_run_judges_it(tmp_path, monkeypatch, capsys):
     out = str(tmp_path / "records.jsonl")
     monkeypatch.setattr(ev, "judge_faithfulness", lambda *a: 1 / 0)
-    records = ev.run_questions(QUESTIONS[:1], ["rag_dense"], ["m:free"], {}, "k", 0.6, True, out, answer)
-    assert [(r["id"], r["answer"], r["faithfulness"]) for r in records] == [("A01", "Take 1 g [W.pdf, p. 2]", None)]
+    assert ev.run_questions(QUESTIONS[:1], ["rag_dense"], ["m:free"], {}, "k", 0.6, True, out, answer) == []
     assert "rag_dense m:free A01: judge error: division by zero" in capsys.readouterr().out
+    monkeypatch.setattr(ev, "judge_faithfulness", lambda *a: 0.5)
+    records = ev.run_questions(QUESTIONS[:1], ["rag_dense"], ["m:free"], {}, "k", 0.6, True, out, answer)
+    assert [(r["id"], r["faithfulness"]) for r in records] == [("A01", 0.5)]
+
+
+def quota(*args):
+    """Fail as rag.call_llm does when the daily free limit is reached."""
+    raise rag.QuotaExhausted("the daily free-model limit of the OpenRouter account is used up")
+
+
+def test_the_daily_limit_stops_the_run_and_returns_the_records_so_far(tmp_path, capsys):
+    out = str(tmp_path / "records.jsonl")
+    calls = []
+
+    def runner(system, question, *rest):
+        """Answer the first question, then hit the daily limit."""
+        calls.append(question)
+        return answer() if len(calls) == 1 else quota()
+
+    records = ev.run_questions(QUESTIONS, ["rag_dense", "no_rag"], ["m:free", "n:free"], {}, "k", 0.6, False,
+                               out, runner)
+    assert [(r["system"], r["id"]) for r in records] == [("rag_dense", "A01")] and len(calls) == 2
+    printed = capsys.readouterr().out
+    assert "daily free-model limit" in printed and "run the same command again to resume" in printed
+
+
+def test_the_daily_limit_during_the_judge_writes_no_record_and_stops(tmp_path, monkeypatch):
+    out = str(tmp_path / "records.jsonl")
+    calls = []
+    monkeypatch.setattr(ev, "judge_faithfulness", quota)
+    records = ev.run_questions(QUESTIONS, ["rag_dense"], ["m:free"], {}, "k", 0.6, True, out,
+                               lambda *a: calls.append(a) or answer())
+    assert records == [] and len(calls) == 1
+
+
+def test_a_model_that_fails_three_questions_in_a_row_is_dropped_for_every_system(tmp_path, capsys):
+    out = str(tmp_path / "records.jsonl")
+    questions = [{"id": f"A0{i}", "question": f"q{i}", "answerable": True, "source": "W.pdf"} for i in range(1, 6)]
+    calls = []
+
+    def runner(system, question, ctx, model, *rest):
+        """Fail every question of dead:free after its first; answer for live:free."""
+        calls.append((system, model, question))
+        if model == "dead:free" and question != "q1":
+            raise RuntimeError("upstream down")
+        return answer()
+
+    ev.run_questions(questions, ["rag_dense", "no_rag"], ["dead:free", "live:free"], {}, "k", 0.6, False,
+                     out, runner)
+    dead = [c for c in calls if c[1] == "dead:free"]
+    assert dead == [("rag_dense", "dead:free", q) for q in ("q1", "q2", "q3", "q4")]
+    assert len(calls) == 4 + 2 * 5
+    assert capsys.readouterr().out.count("dead:free: 3 failures in a row") == 1
+
+
+def test_a_success_resets_the_failure_count(tmp_path):
+    out = str(tmp_path / "records.jsonl")
+    questions = [{"id": f"A0{i}", "question": f"q{i}", "answerable": True, "source": "W.pdf"} for i in range(1, 6)]
+    calls = []
+
+    def runner(system, question, *rest):
+        """Fail every question except q3."""
+        calls.append(question)
+        if question != "q3":
+            raise RuntimeError("flaky")
+        return answer()
+
+    ev.run_questions(questions, ["rag_dense"], ["m:free"], {}, "k", 0.6, False, out, runner)
+    assert calls == ["q1", "q2", "q3", "q4", "q5"]
 
 def sheet_record(qid, answer_text):
     """Build a record with the keys the rating sheet reads."""
@@ -211,11 +306,24 @@ def test_evaluate_retrieval_scores_each_retriever_on_hits_pages_and_separation()
     rows, per_question = ev.evaluate_retrieval(RETRIEVAL_QUESTIONS, {"good": answers.get, "bad": wrong_page.get})
     good, bad = ({k: v for k, v in row.items() if k != "mean_latency_ms"} for row in rows)
     assert good == {"retriever": "good", "hit_rate": 1.0, "page_hit_rate": 1.0, "context_precision": 0.75,
-                    "auroc": 1.0, "margin": 0.3, "gap_share": 0.75}
+                    "auroc": 1.0, "margin": 0.3, "gap_share": 0.75, "heldout_auroc": None, "heldout_margin": None}
     assert (bad["hit_rate"], bad["page_hit_rate"], bad["context_precision"], bad["auroc"]) == (0.5, 0.0, 0.5, 0.0)
     assert per_question[0] == {"id": "A01", "answerable": True, "good_best": 0.8, "good_page_hit": True,
                                "bad_best": 0.5, "bad_page_hit": False}
     assert per_question[2]["good_page_hit"] == "" and per_question[2]["good_best"] == 0.4
+
+def test_evaluate_retrieval_measures_the_held_out_separation_apart():
+    questions = RETRIEVAL_QUESTIONS + [{"id": "N01", "question": "q4", "answerable": False, "source": None, "page": None},
+                                       {"id": "N02", "question": "q5", "answerable": False, "source": None, "page": None}]
+    answers = {"q1": ([{"source": "W.pdf", "page": 3}], 0.8), "q2": ([{"source": "Title.", "page": None}], 0.7),
+               "q3": ([], 0.4), "q4": ([], 0.75), "q5": ([], 0.5)}
+    rows, per_question = ev.evaluate_retrieval(questions, {"good": answers.get})
+    row = rows[0]
+    assert (row["auroc"], row["margin"], row["gap_share"]) == (1.0, 0.3, 0.75)   # unchanged by N01, N02
+    assert (row["heldout_auroc"], row["heldout_margin"]) == (0.75, -0.05)
+    assert [r["id"] for r in per_question] == ["A01", "A02", "O01", "N01", "N02"]
+    assert list(row)[list(row).index("gap_share") + 1:] == ["heldout_auroc", "heldout_margin", "mean_latency_ms"]
+
 
 def test_retrieval_command_rejects_an_unknown_reranker(monkeypatch, capsys):
     monkeypatch.setattr(ev, "retrieval", lambda names: 1 / 0)
@@ -337,3 +445,11 @@ def test_run_sends_every_llm_call_through_a_reply_cache_in_results(tmp_path, mon
     assert seen["replies"] == ["reply 1", "reply 1"] and len(llm.requests) == 1
     assert seen["installed"] and (tmp_path / "results" / "llm_cache.jsonl").exists()
     assert rag.call_llm is llm   # the run puts rag.call_llm back
+
+
+def test_load_records_skips_a_torn_line_and_warns_once(tmp_path, capsys):
+    path = tmp_path / "records.jsonl"
+    path.write_text('{"id": "A01"}\n{"id": "A0\n{"id": "O01"}\n{"id', encoding="utf-8")
+    assert ev.load_records(str(path)) == [{"id": "A01"}, {"id": "O01"}]
+    printed = capsys.readouterr().out.splitlines()
+    assert len(printed) == 1 and str(path) in printed[0]
