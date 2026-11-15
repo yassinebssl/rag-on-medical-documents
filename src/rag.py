@@ -190,6 +190,9 @@ def rrf(rankings, k=60):
     """
     # Cormack, Clarke and Buettcher, "Reciprocal Rank Fusion outperforms Condorcet and
     # individual rank learning methods", SIGIR 2009: https://doi.org/10.1145/1571941.1572114
+    # The structure follows reciprocal_rank_fusion in the rag-from-scratch tutorial (Part 6,
+    # RAG-Fusion): https://github.com/langchain-ai/rag-from-scratch. Unlike it, ranks count
+    # from 1 as in the paper, and hits are keyed by their chunk id.
     scores, first = {}, {}
     for ranking in rankings:
         for rank, hit in enumerate(ranking, 1):
