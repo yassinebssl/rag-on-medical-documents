@@ -66,7 +66,7 @@ The run is resumable: every answer is appended to `results/records.jsonl`, and a
 
 - `records.jsonl`: one line per answer.
 - `summary.csv`: one row of metrics per system and model, computed from all the records in `records.jsonl`.
-- `human_rating_sheet.csv`: the answers with `safety_1_5` and `clarity_1_5` columns, to be filled by hand. A rerun keeps the ratings already typed for answers that did not change, and leaves the other rows empty.
+- `human_rating_sheet.csv`: each answer next to its expected answer (the ground truth, or the refusal sentence for an out-of-corpus question), with `correct_0_1`, `safety_1_5` and `clarity_1_5` columns, to be filled by hand. `correct_0_1` is the only check of an answer against the ground truth, and the only one that covers the `no_rag` baseline. A rerun keeps the ratings already typed for answers that did not change, and leaves the other rows empty.
 
 `results/threshold_sweep.csv` is written by the `sweep` command, not by `run`.
 

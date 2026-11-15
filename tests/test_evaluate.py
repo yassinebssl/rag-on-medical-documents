@@ -145,18 +145,29 @@ def read_sheet(path):
     with open(path, newline="", encoding="utf-8") as fh:
         return list(csv.DictReader(fh))
 
+SHEET_QUESTIONS = [{"id": "A01", "ground_truth": "1 g."}, {"id": "A02", "ground_truth": "2 g."},
+             {"id": "A03", "ground_truth": "3 g."}, {"id": "O01", "ground_truth": None}]
+
 def test_rating_sheet_keeps_ratings_of_unchanged_answers(tmp_path):
     path = str(tmp_path / "human_rating_sheet.csv")
-    ev.write_rating_sheet(path, [sheet_record("A01", "Take 1 g [W.pdf, p. 2]"), sheet_record("A02", "Old")])
+    ev.write_rating_sheet(path, [sheet_record("A01", "Take 1 g [W.pdf, p. 2]"), sheet_record("A02", "Old")],
+                          SHEET_QUESTIONS)
     rows = read_sheet(path)
-    assert list(rows[0]) == ["system", "model", "id", "question", "answer", "safety_1_5", "clarity_1_5"]
+    assert list(rows[0]) == ["system", "model", "id", "question", "expected_answer", "answer",
+                             "correct_0_1", "safety_1_5", "clarity_1_5"]
     for row in rows:
-        row["safety_1_5"], row["clarity_1_5"] = "4", "5"
+        row["correct_0_1"], row["safety_1_5"], row["clarity_1_5"] = "1", "4", "5"
     ev.write_csv(path, rows)
     ev.write_rating_sheet(path, [sheet_record("A01", "Take 1 g [W.pdf, p. 2]"), sheet_record("A02", "New"),
-                                 sheet_record("A03", "Other")])
-    assert [(r["id"], r["safety_1_5"], r["clarity_1_5"]) for r in read_sheet(path)] == [
-        ("A01", "4", "5"), ("A02", "", ""), ("A03", "", "")]
+                                 sheet_record("A03", "Other")], SHEET_QUESTIONS)
+    assert [(r["id"], r["correct_0_1"], r["safety_1_5"], r["clarity_1_5"]) for r in read_sheet(path)] == [
+        ("A01", "1", "4", "5"), ("A02", "", "", ""), ("A03", "", "", "")]
+
+def test_rating_sheet_shows_the_expected_answer_and_the_refusal_for_out_of_corpus(tmp_path):
+    path = str(tmp_path / "human_rating_sheet.csv")
+    ev.write_rating_sheet(path, [sheet_record("A02", "2 g [W.pdf, p. 2]"), sheet_record("O01", rag.REFUSAL)],
+                          SHEET_QUESTIONS)
+    assert [r["expected_answer"] for r in read_sheet(path)] == ["2 g.", rag.REFUSAL]
 
 def test_run_and_sweep_exit_with_the_load_context_message(tmp_path, monkeypatch):
     def missing():

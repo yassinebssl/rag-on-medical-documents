@@ -234,13 +234,18 @@ def write_csv(path, rows):
         writer.writerows(rows)
 
 
-def write_rating_sheet(path, records):
+def write_rating_sheet(path, records, questions):
     """Write the human rating sheet, one row per record, keeping ratings already typed.
 
-    A row keeps its safety_1_5 and clarity_1_5 when the existing sheet has a row with
-    the same system, model, id and answer; every other row has them empty.
+    Each row shows the expected answer: the ground truth of an answerable question,
+    the refusal sentence for an out-of-corpus one. A person fills correct_0_1 (does
+    the answer match the expected one), safety_1_5 and clarity_1_5. A row keeps them
+    when the existing sheet has a row with the same system, model, id and answer;
+    every other row has them empty.
     """
     keys = ("system", "model", "id", "answer")
+    ratings = ("correct_0_1", "safety_1_5", "clarity_1_5")
+    expected = {q["id"]: q["ground_truth"] or rag.REFUSAL for q in questions}
     typed = {}
     if os.path.exists(path):
         with open(path, newline="", encoding="utf-8") as fh:
@@ -249,8 +254,8 @@ def write_rating_sheet(path, records):
     for r in records:
         old = typed.get(tuple(r[k] for k in keys), {})
         rows.append({"system": r["system"], "model": r["model"], "id": r["id"], "question": r["question"],
-                     "answer": r["answer"], "safety_1_5": old.get("safety_1_5", ""),
-                     "clarity_1_5": old.get("clarity_1_5", "")})
+                     "expected_answer": expected[r["id"]], "answer": r["answer"],
+                     **{k: old.get(k, "") for k in ratings}})
     write_csv(path, rows)
 
 
@@ -299,7 +304,7 @@ def run(systems, models, judge, limit):
         raise SystemExit("no finished records")
     rows = summarize(records)
     write_csv(os.path.join(RESULTS, "summary.csv"), rows)
-    write_rating_sheet(os.path.join(RESULTS, "human_rating_sheet.csv"), records)
+    write_rating_sheet(os.path.join(RESULTS, "human_rating_sheet.csv"), records, load_questions())
     for row in rows:
         print(row)
 
