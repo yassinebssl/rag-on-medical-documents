@@ -24,7 +24,16 @@ Total & 50 & & 1,530 records, 1,500 of them WHO pages \\
 \end{tabularx}
 \end{table}
 
-Two WHO files were replaced: a scan with no text layer (10 pages, 0 characters), by the WHO antenatal care recommendations (172 pages), and a one-page summary, by the WHO sodium guideline (56 pages). Two WHO PDFs are encrypted and need the \code{cryptography} package. On the recorded corpus, \code{load_documents} returned 1,530 records, 1,500 of them WHO pages (2026-11-14). The number of chunks produced by the chunking of Section~\ref{sec:ingest} is 3,410 (counted in the Chroma collection on 2026-11-15). This is above the 2,000 chunks the brief names as a maximum: the 172-page antenatal care guideline and the other long WHO files alone give more than 2,000 windows of 512 tokens. \TODO{justify keeping all 3,410 chunks, or agree with the instructor that the cap does not apply}.
+Two WHO files were replaced: a scan with no text layer (10 pages, 0 characters), by the WHO antenatal care recommendations (172 pages), and a one-page summary, by the WHO sodium guideline (56 pages). Two WHO PDFs are encrypted and need the \code{cryptography} package. On the recorded corpus, \code{load_documents} returned 1,530 records, 1,500 of them WHO pages (2026-11-14). The number of chunks produced by the chunking of Section~\ref{sec:ingest} is 3,410 (counted in the Chroma collection on 2026-11-15): 2,668 from WHO pages and 742 from PubMed articles.
+
+\paragraph{Why 3,410 chunks and not at most 2,000.} The brief gives a maximum of 2,000 chunks next to a recommended subset of 50 PDFs with 500 pages or more. Our 20 WHO guidelines alone have 1,500 pages, and the 1,530 records hold 1,214,696 tokens of the BGE-M3 tokenizer. We kept every chunk, for four measured reasons.
+\begin{itemize}
+  \item \textbf{The brief's own chunking gives this count.} With 512-token windows and 102 tokens of overlap, the corpus gives 3,410 chunks. Removing the overlap still gives 3,164. Getting under 2,000 would take windows of about 1,024 tokens with no overlap (1,913 chunks), twice the brief's chunk size.
+  \item \textbf{Pages are kept apart so that every WHO chunk cites one page.} A window never spans two pages, so a page adds at least one chunk. The median WHO page has 584 tokens, just over one window, so at least half the pages give two chunks or more; only 553 of the 1,530 records fit in one.
+  \item \textbf{Cutting documents would cut evidence.} The 19 documents that hold the evidence for the 20 answerable questions give 2,150 chunks on their own. No set of documents under 2,000 chunks keeps the evidence for every answerable question.
+  \item \textbf{The cost stays small.} The index is built once, in about 3 hours on a laptop CPU, and the build resumes after an interruption. On this index of 3,410 chunks, hybrid retrieval takes 0.22\,s per question (Table~\ref{tab:retrieval}).
+\end{itemize}
+The counts for other window sizes were computed from the same records and tokenizer (2026-11-15); no index was built with them.
 
 \paragraph{Licences.} WHO guidelines are free to download, and PubMed Central open-access articles carry licences that allow reuse, each its own. The repository holds only the manifest and links, not the documents. \TODO{check the licence of each PubMed article in the manifest before the hand-in, and list any that does not allow text mining}
 

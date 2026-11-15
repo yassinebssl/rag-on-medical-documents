@@ -11,7 +11,10 @@ These are the brief's values (20\,\% overlap). Counting in tokens of the embeddi
 tokenizer means a chunk is exactly what BGE-M3 reads. The overlap makes a sentence of up to 102
 tokens that is cut at the end of one window appear whole at the start of the next. A guideline can
 run to hundreds of pages and the prompt holds five passages, so the unit must be short. WHO PDFs are chunked page by page, so
-every WHO chunk has one page number to cite. We did not compare other sizes, so this choice is not
+every WHO chunk has one page number to cite. The corpus gives 3,410 chunks, above the brief's maximum of 2,000: that maximum goes with a
+recommended subset of 500 pages or more, and our WHO guidelines alone have 1,500. Even without
+overlap there would be 3,164, and the 19 documents that hold the evidence for the answerable questions
+give 2,150 on their own, so we kept them all (report, Section~3). We did not compare other sizes, so this choice is not
 measured. What we did check is that the chunks hold the evidence: \code{scripts/check_eval_set.py}
 found all 20 evidence quotes of the answerable questions on their recorded page (20/20, run on
 2026-11-14).
