@@ -10,8 +10,9 @@ are fused by reciprocal rank fusion and the first 5 are the passages; the
 refusal gate still uses the best dense similarity.
 
 Cross-encoder gate (reranker given): the passages stay the same, but the gate
-compares the cross-encoder's best score over them (rerank.gate_score, 0..1) with
+compares the cross-encoder's score over them (rerank.gate_score, 0..1) with
 RERANK_THRESHOLD instead of comparing the dense similarity with the threshold.
+It refuses when no passage reaches the threshold.
 
 Only free OpenRouter models are allowed (model id ends in ':free', or is the
 'openrouter/free' router). This is a project rule, enforced here.
@@ -181,7 +182,9 @@ def answer_question(question, embedder, collection, model, api_key, threshold=SI
     """Retrieve (fused with BM25 if given), refuse below the gate's threshold, else generate_answer.
 
     The gate is the best dense similarity against threshold, or, with a reranker,
-    the cross-encoder gate score against rerank_threshold.
+    the cross-encoder gate score against rerank_threshold. The cross-encoder stops at
+    the first passage that reaches rerank_threshold, so rerank_score is that passage's
+    score when the question is answered and the best score when it is refused.
     """
     if bm25 is None:
         hits = retrieve(question, embedder, collection)
@@ -194,7 +197,7 @@ def answer_question(question, embedder, collection, model, api_key, threshold=SI
     if reranker is not None:
         from rerank import gate_score
 
-        rerank_score = gate_score(question, hits, reranker)
+        rerank_score = gate_score(question, hits, reranker, stop_at=rerank_threshold)
         refuse, reason = rerank_score < rerank_threshold, "below_rerank_threshold"
     else:
         refuse, reason = best < threshold, "below_threshold"

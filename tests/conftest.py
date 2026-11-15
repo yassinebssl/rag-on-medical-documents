@@ -41,6 +41,7 @@ class FakeReranker:
         self.scores, self.calls = scores, []
 
     def predict(self, pairs):
-        """Return the first len(pairs) scores."""
+        """Return the next len(pairs) scores: a later call continues where the last one stopped."""
+        start = sum(len(batch) for batch in self.calls)
         self.calls.append(pairs)
-        return self.scores[:len(pairs)]
+        return self.scores[start:start + len(pairs)]

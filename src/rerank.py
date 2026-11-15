@@ -40,14 +40,22 @@ def rerank(question, hits, reranker, k=5):
     return [{**h, "rerank": float(s)} for h, s in ranked]
 
 
-def gate_score(question, hits, reranker):
+def gate_score(question, hits, reranker, stop_at=None):
     """Return the sigmoid of the cross-encoder's best raw score (logit) over the hits, 0.0 for no hits.
 
     The sigmoid maps the logit to 0..1, and 0.5 (logit 0) is the model's own boundary
     between relevant and not relevant. It expects a model whose predict returns logits,
     as the MiniLM gate reranker does.
+
+    The hits are scored one at a time, in retrieval order. With stop_at, scoring stops
+    at the first hit whose score reaches it, and that score is returned instead of the
+    best one. A gate that refuses below stop_at decides the same either way, and an
+    answerable question usually stops at its first passage.
     """
-    if not hits:
-        return 0.0
-    best = max(reranker.predict([(question, h["text"]) for h in hits]))
-    return 1 / (1 + math.exp(-best))
+    best = 0.0
+    for hit in hits:
+        logit = reranker.predict([(question, hit["text"])])[0]
+        best = max(best, 1 / (1 + math.exp(-logit)))
+        if stop_at is not None and best >= stop_at:
+            break
+    return best

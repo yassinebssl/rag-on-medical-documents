@@ -2,6 +2,7 @@
 import math
 
 import rerank
+from conftest import FakeReranker
 
 
 class FakeCrossEncoder:
@@ -44,8 +45,40 @@ def test_every_reranker_name_maps_to_a_model_id():
     assert rerank.RERANKERS["medcpt"] == "ncbi/MedCPT-Cross-Encoder"
 
 
+def sigmoid(logit):
+    """Map a raw score to 0..1."""
+    return 1 / (1 + math.exp(-logit))
+
+
+ABC = [{"text": "a"}, {"text": "b"}, {"text": "c"}]
+
+
 def test_gate_score_is_the_sigmoid_of_the_best_logit():
-    from conftest import FakeReranker
-    hits = [{"text": "a"}, {"text": "b"}, {"text": "c"}]
-    assert abs(rerank.gate_score("q", hits, FakeReranker([-1.0, 3.0, 0.5])) - 1 / (1 + math.exp(-3.0))) < 1e-9
+    assert abs(rerank.gate_score("q", ABC, FakeReranker([-1.0, 3.0, 0.5])) - sigmoid(3.0)) < 1e-9
     assert rerank.gate_score("q", [], FakeReranker([])) == 0.0
+
+
+def test_gate_score_scores_one_passage_at_a_time_in_retrieval_order():
+    ce = FakeReranker([-1.0, 3.0, 0.5])
+    rerank.gate_score("q", ABC, ce)
+    assert ce.calls == [[("q", "a")], [("q", "b")], [("q", "c")]]
+
+
+def test_gate_score_stops_at_the_first_passage_that_reaches_stop_at():
+    ce = FakeReranker([-1.0, 0.5, 3.0])
+    assert abs(rerank.gate_score("q", ABC, ce, stop_at=0.5) - sigmoid(0.5)) < 1e-9
+    assert ce.calls == [[("q", "a")], [("q", "b")]]   # c, the best passage, is never scored
+
+
+def test_gate_score_with_stop_at_is_the_best_score_when_no_passage_reaches_it():
+    ce = FakeReranker([-1.0, -3.0, -0.5])
+    assert abs(rerank.gate_score("q", ABC, ce, stop_at=0.5) - sigmoid(-0.5)) < 1e-9
+    assert len(ce.calls) == 3
+
+
+def test_stopping_early_never_changes_the_gate_decision():
+    for logits in ([-1.0, 3.0, 0.5], [-4.0, -2.0, -0.1], [0.0, -1.0, -1.0], [-1.0, -1.0, 0.0], [2.0, 9.0, 9.0]):
+        for threshold in (0.1, 0.5, 0.9):
+            full = rerank.gate_score("q", ABC, FakeReranker(logits))
+            early = rerank.gate_score("q", ABC, FakeReranker(logits), stop_at=threshold)
+            assert (early < threshold) == (full < threshold)

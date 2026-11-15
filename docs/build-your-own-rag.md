@@ -200,7 +200,9 @@ def answer_question(question, embedder, collection, model, api_key, threshold=SI
     """Retrieve (fused with BM25 if given), refuse below the gate's threshold, else generate_answer.
 
     The gate is the best dense similarity against threshold, or, with a reranker,
-    the cross-encoder gate score against rerank_threshold.
+    the cross-encoder gate score against rerank_threshold. The cross-encoder stops at
+    the first passage that reaches rerank_threshold, so rerank_score is that passage's
+    score when the question is answered and the best score when it is refused.
     """
     if bm25 is None:
         hits = retrieve(question, embedder, collection)
@@ -213,7 +215,7 @@ def answer_question(question, embedder, collection, model, api_key, threshold=SI
     if reranker is not None:
         from rerank import gate_score
 
-        rerank_score = gate_score(question, hits, reranker)
+        rerank_score = gate_score(question, hits, reranker, stop_at=rerank_threshold)
         refuse, reason = rerank_score < rerank_threshold, "below_rerank_threshold"
     else:
         refuse, reason = best < threshold, "below_threshold"
@@ -506,20 +508,25 @@ The run prints `reason=<reason> best_similarity=<value>`, one line per passage w
 
 Look at the closest out-of-corpus question in Step 13's set: "How long is a typical course of isotretinoin for severe acne?" (O06). Its best dense similarity is 0.588, only 0.012 under 0.6. BGE-M3 embeds the question and each chunk separately, so cosine similarity measures whether a passage is on the same topic, and a medical question outside the corpus is often on a nearby topic. The gate refuses it, but with almost no room.
 
-A **cross-encoder** reads the question and one passage together, as one input, and returns one score for "does this passage answer this question". It is slower than comparing two stored vectors, so it only scores passages that retrieval already found (Nogueira and Cho, "Passage Re-ranking with BERT", 2019, https://arxiv.org/abs/1901.04085). `src/rerank.py` holds two functions. `rerank` sorts hits by the cross-encoder's score. `gate_score` returns the sigmoid of the best raw score over the hits, a number from 0 to 1 where 0.5 is the model's own boundary between relevant and not relevant:
+A **cross-encoder** reads the question and one passage together, as one input, and returns one score for "does this passage answer this question". It is slower than comparing two stored vectors, so it only scores passages that retrieval already found (Nogueira and Cho, "Passage Re-ranking with BERT", 2019, https://arxiv.org/abs/1901.04085). `src/rerank.py` holds two functions. `rerank` sorts hits by the cross-encoder's score. `gate_score` returns the sigmoid of the best raw score over the hits, a number from 0 to 1 where 0.5 is the model's own boundary between relevant and not relevant. It scores the hits one at a time, in retrieval order, and with `stop_at` it stops at the first hit that reaches that value:
 
 ```python
-def gate_score(question, hits, reranker):
+def gate_score(question, hits, reranker, stop_at=None):
     # ...
-    if not hits:
-        return 0.0
-    best = max(reranker.predict([(question, h["text"]) for h in hits]))
-    return 1 / (1 + math.exp(-best))
+    best = 0.0
+    for hit in hits:
+        logit = reranker.predict([(question, hit["text"])])[0]
+        best = max(best, 1 / (1 + math.exp(-logit)))
+        if stop_at is not None and best >= stop_at:
+            break
+    return best
 ```
 
-`answer_question` takes an optional `reranker`. With one, the passages stay the same and only the gate changes: it compares `gate_score` with `RERANK_THRESHOLD = 0.5` and refuses with the reason `below_rerank_threshold`. The result also carries `rerank_score` (`None` without a reranker). `load_context` loads the gate model, `cross-encoder/ms-marco-MiniLM-L6-v2` (about 90 MB), and the command line gains `--rerank`.
+Why stop early? The gate only asks whether one passage reaches the threshold, and the answer is the same whether it scores every passage or stops at the first one that does. On the 20 answerable questions the first passage reaches 0.5 for 19 and the second for the other one, so the cross-encoder reads one passage instead of five. Retrieval and the gate together then take about 0.3 s for an answerable question instead of 0.7 s. An out-of-corpus question still needs all five (about 0.5 s). The cost: when a question is answered, `rerank_score` is the score of the first passage that reached the threshold, which may not be the best one. When it is refused, every passage was scored and it is the best score.
 
-Which cross-encoder? `src/evaluate.py retrieval` compares three on the 30 questions with no LLM call: the medical `ncbi/MedCPT-Cross-Encoder`, the multilingual `BAAI/bge-reranker-v2-m3` and the small MiniLM. For each it measures the page hit rate and context precision of the passages, and the separation of the gate score: `auroc`, the share of (answerable, out-of-corpus) pairs in which the answerable question scores higher, and `margin`, the lowest answerable score minus the highest out-of-corpus one. On the recorded corpus, scoring the 5 hybrid passages with each model's own 0.5 boundary, only MiniLM answers all 20 answerable questions and refuses all 10 out-of-corpus ones, in 0.8 s per question: O06 gets 0.156, and the lowest answerable question 0.870. MedCPT lets "Who painted the Mona Lisa?" through (0.78), and bge-reranker-v2-m3 the multiple sclerosis question (0.85) and takes about 11 s. Reordering the 20 fused candidates with a cross-encoder did not find the evidence pages more often than the hybrid passages, so the project uses the cross-encoder for the gate only.
+`answer_question` takes an optional `reranker`. With one, the passages stay the same and only the gate changes: it compares `gate_score(question, hits, reranker, stop_at=rerank_threshold)` with `RERANK_THRESHOLD = 0.5` and refuses with the reason `below_rerank_threshold`. The result also carries `rerank_score` (`None` without a reranker). `load_context` loads the gate model, `cross-encoder/ms-marco-MiniLM-L6-v2` (about 90 MB), and the command line gains `--rerank`.
+
+Which cross-encoder? `src/evaluate.py retrieval` compares three on the 30 questions with no LLM call: the medical `ncbi/MedCPT-Cross-Encoder`, the multilingual `BAAI/bge-reranker-v2-m3` and the small MiniLM. For each it measures the page hit rate and context precision of the passages, and the separation of the gate score: `auroc`, the share of (answerable, out-of-corpus) pairs in which the answerable question scores higher, and `margin`, the lowest answerable score minus the highest out-of-corpus one. On the recorded corpus, scoring the 5 hybrid passages with each model's own 0.5 boundary, only MiniLM answers all 20 answerable questions and refuses all 10 out-of-corpus ones, in 0.8 s per question when it scores all five passages in one batch, as the comparison does: O06 gets 0.156, and the lowest answerable question 0.870. MedCPT lets "Who painted the Mona Lisa?" through (0.78), and bge-reranker-v2-m3 the multiple sclerosis question (0.85) and takes about 11 s. Reordering the 20 fused candidates with a cross-encoder did not find the evidence pages more often than the hybrid passages, so the project uses the cross-encoder for the gate only.
 
 Both the dense similarity and the cross-encoder rank every answerable question above every out-of-corpus one (`auroc` 1.0), so 30 questions cannot show that one ranks better. What differs is the threshold: 0.6 was checked on these same questions, and 0.5 was not tuned on them.
 

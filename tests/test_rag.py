@@ -250,6 +250,16 @@ def test_reranker_gate_answers_a_high_cross_encoder_score_even_when_similarity_i
     assert abs(res["rerank_score"] - 1 / (1 + math.exp(-2.0))) < 1e-9
 
 
+def test_reranker_gate_stops_at_the_first_passage_that_reaches_the_threshold(monkeypatch):
+    from conftest import FakeReranker
+    monkeypatch.setattr(rag, "call_llm", lambda *a, **k: "Twice daily [1].")
+    reranker = FakeReranker([-1.0, 5.0])
+    res = rag.answer_question("q", FakeEmbedder(), FakeCollection(rows(0.1)), rag.DEFAULT_MODEL, "k",
+                              reranker=reranker, rerank_threshold=0.2)   # sigmoid(-1.0) is 0.269
+    assert res["reason"] == "answered" and len(reranker.calls) == 1
+    assert abs(res["rerank_score"] - 1 / (1 + math.exp(1.0))) < 1e-9
+
+
 def test_answer_question_without_a_reranker_has_no_rerank_score(monkeypatch):
     monkeypatch.setattr(rag, "call_llm", lambda *a, **k: "Twice daily [1].")
     res = rag.answer_question("q", FakeEmbedder(), FakeCollection(rows(0.1)), rag.DEFAULT_MODEL, "k")
