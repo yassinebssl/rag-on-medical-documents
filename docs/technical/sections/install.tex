@@ -1,0 +1,45 @@
+\section{Installation and run guide}
+\label{sec:install}
+
+The commands are for a clean Linux machine with Python 3.12, run from the repository root. The
+README gives the same steps; the user manual explains them for a non-developer.
+
+\begin{lstlisting}
+python3 -m venv .venv                     # Debian/Ubuntu: sudo apt install python3-venv
+.venv/bin/pip install -r requirements.txt # includes the CPU build of PyTorch
+cp .env.example .env                      # then put a free key after OPENROUTER_API_KEY=
+.venv/bin/python scripts/fetch_corpus.py --from-manifest
+.venv/bin/python scripts/check_eval_set.py   # expects 20/20 evidence quotes found
+.venv/bin/python src/index.py             # about 3 h on a CPU; rerun to resume; --rebuild
+.venv/bin/python src/app.py               # then open http://127.0.0.1:7860
+\end{lstlisting}
+
+\code{.env} holds two lines: \code{OPENROUTER_API_KEY} and \code{OPENROUTER_MODEL} (default
+\nolinkurl{nvidia/nemotron-3-ultra-550b-a55b:free}, used by the command line and the evaluation). It is
+ignored by git and must never be committed. The first index build downloads BGE-M3 (about 2\,GB); the
+first launch of the app downloads the MiniLM cross-encoder (about 90\,MB). The documents
+(\code{data/raw/}), the index (\code{chroma_db/}) and the results (\code{results/}) are not in git;
+only \code{data/raw/manifest.json} and \code{data/eval/questions.json} are.
+
+\paragraph{Other commands.}
+\begin{lstlisting}
+.venv/bin/pytest                                   # 102 offline tests
+.venv/bin/python src/rag.py "question" [model] [--hybrid] [--rerank]
+.venv/bin/python src/evaluate.py retrieval [--rerankers medcpt,bge,minilm]   # no LLM call
+.venv/bin/python src/evaluate.py sweep                                       # no LLM call
+.venv/bin/python src/evaluate.py run [--systems a,b] [--models m1,m2|all] [--judge] [--limit N]
+.venv/bin/python scripts/run_evaluation.py         # one day's share of the evaluation
+\end{lstlisting}
+
+The recommended order is \code{retrieval}, then \code{sweep}, then \code{run --judge}. \code{sweep}
+only prints the best threshold; to use it, copy it into \code{SIM_THRESHOLD} in \code{src/rag.py} and
+move \code{results/records.jsonl} away, since \code{run} refuses to mix thresholds. To get new replies
+from the models, delete \code{results/llm_cache.jsonl} together with \code{results/records.jsonl}.
+The first \code{retrieval} run downloads the three cross-encoders (about 2.8\,GB).
+
+\paragraph{Errors at start-up.}
+\code{load_context} stops with one line when the key or the index is missing:
+\begin{lstlisting}
+OPENROUTER_API_KEY is missing: copy .env.example to .env and add your key.
+The index is empty: run .venv/bin/python src/index.py first.
+\end{lstlisting}

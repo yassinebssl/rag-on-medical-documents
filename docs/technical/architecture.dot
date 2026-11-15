@@ -1,0 +1,87 @@
+// Architecture of the medical RAG system as built (branch eval-prep).
+// Render: dot -Tpng -Gdpi=200 architecture.dot -o architecture_diagram.png
+digraph rag {
+  graph [rankdir=TB, fontname="Helvetica", fontsize=13, nodesep=0.18, ranksep=0.28,
+         newrank=true, labeljust=l, pad=0.15];
+  node  [shape=box, style="rounded,filled", fillcolor="#ffffff", color="#555555",
+         fontname="Helvetica", fontsize=11, margin="0.08,0.04"];
+  edge  [color="#444444", fontname="Helvetica", fontsize=9.5, arrowsize=0.7];
+
+  // ---------------- 1. offline: corpus and index ----------------
+  subgraph cluster_offline {
+    label="1. Offline: corpus and index (run once)"; style="rounded,filled"; fillcolor="#eef3fa"; color="#8aa4c8";
+    manifest [label="data/raw/manifest.json\n20 WHO + 30 PubMed Central", shape=note, fillcolor="#fffbe6"];
+    fetch    [label="scripts/fetch_corpus.py\n--from-manifest"];
+    raw      [label="data/raw/who/*.pdf\ndata/raw/pubmed/*.txt", shape=folder, fillcolor="#fffbe6"];
+    load     [label="ingest.load_documents\npypdf per page,\nskip pages <= 50 chars"];
+    chunk    [label="ingest.chunk_document\n512 tokens, 102 overlap\nid = source|page|start"];
+    embed    [label="index.build_index\nBAAI/bge-m3, normalised\nsaved every 96, resumable"];
+    chroma   [label="Chroma medical_docs\ncosine, chroma_db/", shape=cylinder, fillcolor="#e3ecf7"];
+    manifest -> fetch -> raw;
+    raw -> load -> chunk -> embed -> chroma;
+    {rank=same; manifest; fetch; raw;}
+    {rank=same; load; chunk; embed; chroma;}
+  }
+
+  // ---------------- 2. online: one question ----------------
+  subgraph cluster_online {
+    label="2. Online: one question (rag.answer_question)"; style="rounded,filled"; fillcolor="#eef7ee"; color="#8cbf8c";
+    question [label="Question\nsrc/app.py or src/rag.py", shape=oval];
+    dense    [label="Dense retrieval\nrag.retrieve, BGE-M3\nsim = 1 - cosine dist.\ntop 20 (top 5 dense mode)"];
+    bm25     [label="BM25 from scratch\nsrc/bm25.py, in memory\nk1 = 1.5, b = 0.75, top 20"];
+    rrf      [label="Reciprocal rank fusion\nrag.rrf, 1 / (60 + rank)\nfirst 5 passages"];
+    gate     [label="Refusal\ngate", shape=diamond, fillcolor="#fff4d6", margin="0.02,0.02"];
+    gates    [label="Default: MiniLM cross-encoder\n(src/rerank.py), sigmoid >= 0.5,\nstops at first passage reaching it\n\nDense, hybrid modes:\nbest dense similarity >= 0.6", shape=note, fillcolor="#fff9e8"];
+    prompt   [label="rag.PROMPT\npassages [1]..[5],\ntheir [12] markers -> (12)"];
+    llm      [label="rag.call_llm\ncheck_free, temperature 0\nmax_tokens 600; retry 429/5xx\nafter 10, 20, 40 s; resend once\nwith 4000 if cut at max_tokens"];
+    check    [label="Citation check\nrag.generate_answer\n>= 1 citation, all in 1..5"];
+    answer   [label="Answer with\n[file, p. N] / [title]\n+ sources + disclaimer", shape=oval, fillcolor="#dff0df"];
+    refusal  [label="\"I cannot answer this\nquestion from the\nprovided documents.\"\n+ reason", shape=oval, fillcolor="#f9dede", color="#b05050"];
+
+    question -> dense;
+    question -> bm25 [label=" hybrid\n modes"];
+    dense -> rrf;
+    bm25 -> rrf;
+    rrf -> gate;
+    dense -> gate [style=dashed, label=" dense\n mode"];
+    gate -> gates [arrowhead=none, style=dotted];
+    gate -> prompt [label=" pass"];
+    gate -> refusal [label=" below_threshold /\n below_rerank_\n threshold", color="#b05050", fontcolor="#b05050"];
+    prompt -> llm -> check;
+    check -> answer [label=" answered"];
+    check -> refusal [label=" uncited /\n model_refused", color="#b05050", fontcolor="#b05050"];
+    {rank=same; gate; gates;}
+  }
+
+  openrouter [label="OpenRouter API\nfree models only (:free)\ndefault nvidia/nemotron-\n3-ultra-550b-a55b:free\n429 free-models-per-day\n-> QuotaExhausted", shape=box3d, fillcolor="#f2eefa", color="#7a68a6"];
+  llm -> openrouter [dir=both, style=dashed, color="#7a68a6", constraint=false];
+  {rank=same; llm; openrouter;}
+
+  chroma -> dense [style=bold, color="#4a6fa5", label=" query", constraint=false];
+  chroma -> bm25 [style=bold, color="#4a6fa5", label=" all_chunks", constraint=false];
+
+  // ---------------- 3. evaluation ----------------
+  subgraph cluster_eval {
+    label="3. Evaluation (src/evaluate.py)"; style="rounded,filled"; fillcolor="#f8f0f8"; color="#b88ab8";
+    qset    [label="data/eval/questions.json, 40 questions\nA01-A20 answerable, O01-O10 out of\ncorpus, N01-N10 held out", shape=note, fillcolor="#fffbe6"];
+    daily   [label="scripts/run_evaluation.py\nonce a day: requests left?\nlock file, results/logs/"];
+    nollm   [label="evaluate.py retrieval\n(+ MedCPT, bge, MiniLM)\nevaluate.py sweep\n(0.30 to 0.80)\nno LLM call"];
+    run     [label="evaluate.py run --judge\n5 systems: rag_dense, rag_hybrid,\nrag_rerank, bm25_rag, no_rag\njudge = FREE_MODELS[0]"];
+    cache   [label="ReplyCache, SHA-256 of\nmodel, prompt, max_tokens\nresults/llm_cache.jsonl", fillcolor="#fbeffb"];
+    outs1   [label="results/retrieval.csv\nretrieval_questions.csv\nthreshold_sweep.csv", shape=note, fillcolor="#fffbe6"];
+    outs3   [label="results/records.jsonl\nsummary.csv\nhuman_rating_sheet.csv", shape=note, fillcolor="#fffbe6"];
+    qset -> nollm -> outs1;
+    qset -> run;
+    daily -> run;
+    run -> cache;
+    run -> outs3;
+    {rank=same; qset; daily;}
+  }
+  cache -> openrouter [style=dashed, color="#7a68a6", label=" new requests\n only", constraint=false];
+
+  // layout only: stack the three parts
+  chunk -> question [style=invis, weight=20];
+  embed -> bm25 [style=invis, weight=10];
+  refusal -> qset [style=invis, weight=20];
+  answer -> daily [style=invis, weight=20];
+}

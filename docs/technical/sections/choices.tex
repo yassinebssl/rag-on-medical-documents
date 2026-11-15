@@ -1,0 +1,94 @@
+\section{Technical choices}
+\label{sec:choices}
+
+Each choice below gives the reason and, where we have one, the measurement behind it. Unless said
+otherwise, the retrieval figures come from \code{results/retrieval.csv} and
+\code{results/retrieval_questions.csv}, written by \code{evaluate.py retrieval} on the original 30
+questions (20 answerable, 10 out of corpus) before the 10 held-out questions existed.
+
+\paragraph{Chunks of 512 tokens with 102 tokens of overlap.}
+These are the brief's values (20\,\% overlap). Counting in tokens of the embedding model's own
+tokenizer means a chunk is exactly what BGE-M3 reads. The overlap makes a sentence of up to 102
+tokens that is cut at the end of one window appear whole at the start of the next. A guideline can
+run to hundreds of pages and the prompt holds five passages, so the unit must be short. WHO PDFs are chunked page by page, so
+every WHO chunk has one page number to cite. We did not compare other sizes, so this choice is not
+measured. What we did check is that the chunks hold the evidence: \code{scripts/check_eval_set.py}
+found all 20 evidence quotes of the answerable questions on their recorded page (20/20, run on
+2026-11-14).
+
+\paragraph{BGE-M3 for embeddings.}
+The brief names it, and our architecture note chose it as multilingual and strong on medical
+text. On the answerable questions,
+dense retrieval alone finds the right document for 19 of 20 (hit rate 0.95) and the evidence page
+for 16 (page hit rate 0.80), with a context precision of 0.857, in 185\,ms per question. Its best
+similarity also separates the questions: every answerable question scores above every out-of-corpus
+one (AUROC 1.0). The cost is the build: about 3\,s per chunk on a laptop CPU and about 3 hours in
+all, after a 2\,GB download. This is why the build is resumable.
+
+\paragraph{Chroma with cosine distance.}
+Chroma stores the vectors, the text and the metadata (source, kind, page) in one local folder, with
+no server. The collection is created with \code{"hnsw:space": "cosine"}, so the distance it returns
+converts to a similarity with $1 - d$ and the threshold compares like with like
+(Section~\ref{sec:difficulties}). Chroma answers \code{get} by id, which the resumable build uses.
+
+\paragraph{BM25 written from scratch, fused by reciprocal rank fusion.}
+The course asks for two baselines, and BM25 is one of them (\code{bm25_rag}). We wrote it with the
+standard library, after two build-your-own-x tutorials, so that we know every line. BM25 catches
+exact strings, such as a drug name, that embeddings can miss. Alone, it finds the most evidence
+pages (page hit rate 0.95, context precision 0.932, 7\,ms), but its score cannot gate: it has no
+fixed scale, and an out-of-corpus question can outscore an answerable one (AUROC 0.945, negative
+margin). Fusion by rank needs no common scale. Hybrid retrieval raises the page hit rate from 0.80
+to 0.90 and context precision from 0.857 to 0.911 over dense alone, with a hit rate of 1.0, in
+0.22\,s per question. The similarity gate keeps using the best dense similarity, because BM25 hits
+carry none.
+
+\paragraph{A cross-encoder as the refusal gate, not as a reorderer.}
+Cosine similarity measures whether a passage is on the same topic, and an out-of-corpus medical
+question is often on a nearby one. The closest case is O06, ``How long is a typical course of
+isotretinoin for severe acne?'': best similarity 0.588, refused by only 0.012, with a threshold that
+was itself checked on the same questions. A cross-encoder reads the question and a passage together
+and scores whether the passage answers it. We compared three as a gate over the same 5 hybrid
+passages, each at its own 0.5 boundary:
+\begin{itemize}[leftmargin=1.5em]
+  \item MiniLM (\code{ms-marco-MiniLM-L6-v2}) answers all 20 answerable questions (lowest 0.870) and
+        refuses all 10 out-of-corpus ones (highest 0.156, O06), in about 0.8\,s per question.
+  \item MedCPT lets ``Who painted the Mona Lisa?'' through (0.78) and takes about 3\,s.
+  \item bge-reranker-v2-m3 lets the multiple sclerosis question through (0.85) and takes about 11\,s.
+\end{itemize}
+MiniLM is the only one that separates the 30 questions at an untuned threshold, and it is the
+fastest. As a reorderer of the 20 fused candidates, against hybrid alone (page hit rate 0.90):
+MedCPT found fewer evidence pages (0.80, 14.7\,s), MiniLM as many (0.90, 2.2\,s), and
+bge-reranker-v2-m3 one more (0.95) at about 46\,s per question. One page in 20 does not pay for 46\,s
+per question, and that model cannot gate, so the cross-encoder only gates. Both the dense similarity
+and MiniLM rank every answerable question above every out-of-corpus one, so on these 30 questions
+the gain is the untuned threshold and the room around it, not a better ranking.
+
+\paragraph{Stop at the first passage that passes.}
+The gate only needs to know whether one passage reaches 0.5. Scoring in retrieval order and
+stopping there gives the same decision. On the 20 answerable questions the first passage passes for
+19 and the second for the last one, so retrieval and gate take about 0.3\,s instead of 0.7\,s. An
+out-of-corpus question still scores all five (about 0.5\,s).
+
+\paragraph{Free models on OpenRouter, Nemotron 3 Ultra by default.}
+The team's rule is free models only. The brief suggested comparing Llama~3 with GPT-4o-mini, but no
+free Llama~3 was listed on OpenRouter and GPT-4o-mini is paid, so we compare free models instead
+(\code{FREE_MODELS} lists five). Nemotron 3 Ultra is the largest free model of the list, and its test
+call succeeded, while \code{gemma-4-31b-it:free} was rate-limited (HTTP 429) during the same tests;
+Gemma stays as the second model of the evaluation. The rule is enforced in code by
+\code{check_free}, because the model is only a string in the request: a typo would otherwise send
+questions to a paid model. \code{temperature} is 0 so that a request gives the same reply, which the
+reply cache relies on.
+
+\paragraph{A fixed refusal sentence and a citation check.}
+The refusal is always the same sentence so that code can test for it: in the model's reply, in the
+\code{no_rag} baseline and in the evaluation. The citation check is cheap and catches two failures
+that look grounded to a reader: an answer with no citation and a citation to a passage that does not
+exist. It does not check that a passage supports the claim next to it; the judge model measures
+that in the evaluation (faithfulness).
+
+\paragraph{Metrics computed in our own code.}
+Context precision and faithfulness follow the RAGAS definitions, but \code{evaluate.py} computes
+them itself. Context precision uses the relevance labels of the question set (a passage is relevant
+when it comes from the question's source document) instead of a judge, so it costs no request.
+Faithfulness needs one judge request per answered question, which matters under the 50-request
+daily quota.

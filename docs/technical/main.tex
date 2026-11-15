@@ -1,0 +1,82 @@
+% Technical documentation of the RAG on Medical Documents project.
+% Build from this folder: pdflatex main.tex (twice, for the table of contents).
+% The result tables are read from ../report/generated/ and the plots from ../../results/;
+% when a file is missing, a red TODO is printed instead.
+\documentclass[10pt,a4paper]{article}
+
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage{microtype}
+\usepackage[a4paper,margin=2cm,headheight=14pt]{geometry}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{tabularx}
+\usepackage{array}
+\usepackage{amsmath}
+\usepackage{xcolor}
+\usepackage{enumitem}
+\usepackage{fancyhdr}
+\usepackage{caption}
+\usepackage{float}
+\usepackage{listings}
+\usepackage{pgfplots}
+\pgfplotsset{compat=1.18}
+\usepackage{xurl}
+\usepackage[hidelinks]{hyperref}
+
+% Anything not yet known is printed in red, so that it cannot be missed.
+\newcommand{\TODO}[1]{\textcolor{red}{\textbf{[TODO: #1]}}}
+% Code names (file names, functions, constants) in typewriter, underscores kept as typed.
+\newcommand{\code}[1]{\texttt{\detokenize{#1}}}
+% Paths to the generated tables and to the result files, relative to this folder.
+\newcommand{\gen}{../report/generated}
+\newcommand{\res}{../../results}
+
+\lstset{basicstyle=\ttfamily\small, breaklines=true, columns=fullflexible,
+        frame=single, rulecolor=\color{black!25}, backgroundcolor=\color{black!3},
+        xleftmargin=0.5em, xrightmargin=0.5em, aboveskip=0.6em, belowskip=0.6em}
+\setlist{itemsep=0.15em, topsep=0.3em}
+\setlength{\parskip}{0.2em}
+\setlength{\parindent}{0pt}
+\captionsetup{font=small, labelfont=bf, justification=raggedright, singlelinecheck=true}
+\renewcommand{\arraystretch}{1.15}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\small \TODO{school name}}
+\fancyhead[R]{\small Group \TODO{NN} -- RAG on Medical Documents}
+\fancyfoot[C]{\small \thepage}
+
+\begin{document}
+
+\begin{center}
+  {\LARGE\bfseries RAG on Medical Documents}\\[0.4em]
+  {\Large Technical documentation}\\[0.8em]
+  Boussoualim Yassine \quad Benahcene Mohamed Wassim \quad Aissaoui Anes Safouane \quad Djerdali Mohamed Achraf\\[0.3em]
+  Group \TODO{group number} \quad -- \quad \TODO{school header}\\
+  LLM Final Projects 2026-2027, Prof.\ A.\ Moussaoui, Project 2\\[0.3em]
+  {\small Describes the code of branch \code{eval-prep} at commit \code{514c930} (15 November 2026).}
+\end{center}
+
+\noindent\textbf{In short.} The system answers medical questions from 20 WHO guidelines and 30 open-access
+PubMed Central articles. It retrieves five passages, asks a free language model on OpenRouter to answer
+only from them and to cite them by number, and keeps the answer only if the citations point at the
+given passages. When a cross-encoder judges that no passage answers the question, or the model does
+not cite the passages, the system replies with one fixed sentence:
+``I cannot answer this question from the provided documents.''
+It is a student project. It is not medical advice.
+
+\noindent\textit{Claude (Anthropic) helped draft this document and write the project's code.}
+
+
+\input{sections/architecture}
+\input{sections/components}
+\input{sections/choices}
+\input{sections/difficulties}
+\input{sections/testing}
+\input{sections/results}
+\input{sections/install}
+\input{sections/limits}
+
+\end{document}

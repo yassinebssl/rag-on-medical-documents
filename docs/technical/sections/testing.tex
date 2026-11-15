@@ -1,0 +1,38 @@
+\section{Testing}
+\label{sec:testing}
+
+The test suite is in \code{tests/} and runs with \code{.venv/bin/pytest} from the repository root
+(\code{pytest.ini} puts \code{src/} on the import path). It uses fakes for the embedding model, the
+Chroma collection, the cross-encoder and the language model (\code{tests/conftest.py}), and replaces
+\code{urlopen} and \code{time.sleep} in the network tests. So it needs no model, no database and no
+network, and it sends nothing to OpenRouter. On 15 November 2026, at commit \code{514c930}, the suite
+ran 102 tests and all passed.
+
+\begin{table}[H]
+  \centering\small
+  \begin{tabularx}{\textwidth}{@{}l r X@{}}
+    \toprule
+    File & Tests & What it pins \\
+    \midrule
+    \code{test_rag.py} & 32 & Source labels; passage numbering and the rewrite of reference markers; citation parsing and expansion; the five verdicts of \code{generate_answer}; the similarity gate never calls the model; \code{check_free}; \code{call_llm} retries (429, 503, empty), stops at once on 401 and on the daily limit, resends once with 4{,}000 tokens; reciprocal rank fusion; the hybrid gate uses the dense similarity; the cross-encoder gate in both directions and its early stop. \\
+    \code{test_evaluate.py} & 39 & Context precision; the sweep and its tie rule; judge parsing and its 4{,}000-token budget; the \code{no_rag} prompt; summary rates, held-out refusals apart; resumable runs; threshold guard; failed judge; daily limit; dropped models; rating sheet; separation (AUROC, margin); retrieval comparison; the reply cache (identical request sent once, no key or prompt in the file, failed call not stored, latency of reused replies); torn JSONL lines. \\
+    \code{test_app.py} & 11 & The answer and refusal text with its reason; empty question; which mode passes BM25 and the cross-encoder; default mode and threshold; model errors shown, not raised; the one-line exits of \code{load_context}; the page builds without launching. \\
+    \code{test_rerank.py} & 9 & Reordering; the gate score is the sigmoid of the best logit; one passage at a time; early stop never changes the decision. \\
+    \code{test_bm25.py} & 4 & Tokenizer; score equals the Okapi formula; ranking and $k$; unknown terms and empty corpus. \\
+    \code{test_ingest.py} & 2 & 512-token windows with 102 of overlap; a short document is one chunk. \\
+    \code{test_eval_set.py} & 2 & 20 answerable, 10 out-of-corpus, 10 held-out questions; only the answerable ones carry evidence. \\
+    Others & 3 & \code{fetch_corpus --from-manifest}, the dataset links, \code{run_evaluation.missing}. \\
+    \bottomrule
+  \end{tabularx}
+  \caption{Test files, number of tests, and what they check.}
+  \label{tab:tests}
+\end{table}
+
+\paragraph{What the tests do not cover.}
+No unit test runs \code{build_index}; the chunking test protects the ids it depends on. The tests do
+not load BGE-M3, the cross-encoders or Chroma, and do not call a real model, so the quality of
+retrieval and answers is measured by the evaluation (Section~\ref{sec:results}), not by the tests.
+Two scripts check the real data: \code{scripts/check_eval_set.py} looks for each evidence quote on
+its recorded page (20/20 found on 2026-11-14), and \code{evaluate.py retrieval} measures retrieval
+with no model call. The app was not tested in a browser by the suite. \TODO{add a manual check of
+the app (three example questions) with its date}

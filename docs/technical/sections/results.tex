@@ -1,0 +1,147 @@
+\section{Quantitative results}
+\label{sec:results}
+
+\TODO{update the status line when the evaluation is complete} The retrieval comparison and the
+threshold sweep make no model call and are complete on the original 30 questions. The evaluation
+with the language models (\code{evaluate.py run --judge}) is spread over several days by the
+50-request daily quota and was still running when this version was written. The tables below are
+generated from the result files by the report's script; a red TODO stands where a table has not been
+generated yet.
+
+\subsection{Corpus and question set}
+
+\begin{table}[htbp]
+  \centering\small
+  \begin{tabularx}{\textwidth}{@{}X l@{}}
+    \toprule
+    Item & Value \\
+    \midrule
+    Documents & 50: 20 WHO guidelines (PDF), 30 PubMed Central articles (text) \\
+    Records read by \code{load_documents} (2026-11-14) & 1{,}530, of which 1{,}500 WHO pages \\
+    Chunks in the index & 3,410 \\
+    Evidence quotes found on their page (\code{check_eval_set.py}) & 20 / 20 \\
+    Questions & 40: A01--A20 answerable, O01--O10 out of corpus, N01--N10 held out \\
+    \bottomrule
+  \end{tabularx}
+  \caption{Corpus and question set.}
+  \label{tab:corpus}
+\end{table}
+
+Each answerable question has a ground-truth answer, a source document, a page and a verbatim
+evidence quote. The quotes come from 19 of the 50 documents, 8 of them PubMed articles. The
+out-of-corpus questions are seven medical questions and three general-knowledge ones; the held-out
+questions are described in Section~\ref{sec:difficulties}.
+
+\subsection{Retrieval and gates, with no model call}
+
+On the answerable questions, hybrid retrieval finds the source document for all 20 (hit rate 1.0)
+and the evidence page for 18 (page hit rate 0.90), against 0.95 and 0.80 for dense retrieval
+alone, with a context precision of 0.911 against 0.857. BM25 alone finds the most pages (0.95) but
+cannot gate. Figure~\ref{fig:separation} shows, for each of the 30 questions, the two scores the
+gates use. Both scores put every answerable question above every out-of-corpus one; the dense
+similarity leaves a gap of 0.036 around its threshold (0.6235 against 0.5878), the cross-encoder a
+gap from 0.156 to 0.870 around 0.5. The \code{heldout_auroc} and \code{heldout_margin} columns need a
+new run of \code{evaluate.py retrieval} on the 40 questions. \TODO{rerun \code{evaluate.py retrieval}
+and report the held-out separation}
+
+\IfFileExists{\gen/retrieval_table.tex}{\input{\gen/retrieval_table.tex}}{\TODO{retrieval table: \code{docs/report/generated/retrieval_table.tex}, from \code{results/retrieval.csv}}}
+
+\begin{figure}[htbp]
+  \centering
+  \IfFileExists{\res/retrieval_questions.csv}{%
+  \begin{tikzpicture}
+    \begin{axis}[width=0.72\textwidth, height=0.36\textwidth,
+                 xlabel={best dense similarity (BGE-M3)},
+                 ylabel={MiniLM gate score (sigmoid)},
+                 xmin=0.3, xmax=0.85, ymin=-0.03, ymax=1.03,
+                 legend pos=south east, legend style={font=\scriptsize},
+                 tick label style={font=\scriptsize}, label style={font=\small}]
+      \addplot[only marks, mark=*, mark size=1.8pt, blue!70!black]
+        table[col sep=comma, x=dense_best,
+              y expr={1/(1+exp(-\thisrow{hybrid+minilm_gate_best}))},
+              skip coords between index={20}{1000}] {\res/retrieval_questions.csv};
+      \addlegendentry{answerable (A01--A20)}
+      \addplot[only marks, mark=x, mark size=2.6pt, thick, red!75!black]
+        table[col sep=comma, x=dense_best,
+              y expr={1/(1+exp(-\thisrow{hybrid+minilm_gate_best}))},
+              skip coords between index={0}{20}, skip coords between index={30}{1000}] {\res/retrieval_questions.csv};
+      \addlegendentry{out of corpus (O01--O10)}
+      \draw[dashed, gray] (axis cs:0.6,-0.03) -- (axis cs:0.6,1.03);
+      \draw[dashed, gray] (axis cs:0.3,0.5) -- (axis cs:0.85,0.5);
+      \node[font=\scriptsize, gray, anchor=south west] at (axis cs:0.6,0.02) {0.6};
+      \node[font=\scriptsize, gray, anchor=south west] at (axis cs:0.31,0.5) {0.5};
+    \end{axis}
+  \end{tikzpicture}}{\TODO{plot of \code{results/retrieval_questions.csv}: file missing}}
+  \caption{Best score of each of the original 30 questions under the two gates, read from
+  \code{results/retrieval_questions.csv}. The cross-encoder's logit is mapped to 0..1 with a sigmoid,
+  as \code{rerank.gate_score} does. Dashed lines: the two thresholds. The isotretinoin question (O06)
+  is the cross nearest to 0.6.}
+  \label{fig:separation}
+\end{figure}
+
+\subsection{Threshold sweep}
+
+\code{evaluate.py sweep} scores 11 thresholds of the dense similarity, from 0.30 to 0.80, on the
+original 30 questions (table generated from \code{results/threshold_sweep.csv}). At 0.60 the answer rate and the refusal rate are both
+1.0; at 0.55 only 7 of the 10 out-of-corpus questions are refused, and at 0.65 one answerable
+question is refused. So 0.6, the brief's value, is also the best on these questions; since it was
+checked on the same 30 questions, this score is optimistic.
+
+\IfFileExists{\gen/sweep_table.tex}{\input{\gen/sweep_table.tex}}{\TODO{sweep table: \code{docs/report/generated/sweep_table.tex}, from \code{results/threshold_sweep.csv}}}
+
+
+
+\subsection{Latency}
+
+Table~\ref{tab:latency} gives the measured times. Retrieval and the gate take well under a second;
+the model call dominates the time of an answer.
+
+\begin{table}[htbp]
+  \centering\small
+  \begin{tabularx}{\textwidth}{@{}X r@{}}
+    \toprule
+    Step (CPU, per question unless stated) & Time \\
+    \midrule
+    Dense retrieval, top 5 & 185\,ms \\
+    BM25, top 5 & 7\,ms \\
+    Hybrid retrieval (dense 20 + BM25 20, fused) & 0.22\,s \\
+    Hybrid + MiniLM gate, five passages in one batch (comparison) & 0.8\,s \\
+    Hybrid + MiniLM gate with early stop (app): answerable / out of corpus & about 0.3\,s / 0.5\,s \\
+    Gate with MedCPT / bge-reranker-v2-m3 & about 3\,s / 11\,s \\
+    Reordering 20 candidates: MiniLM / MedCPT / bge-reranker-v2-m3 & 2.2\,s / 14.7\,s / about 46\,s \\
+    Model call (mean latency per answer, \code{summary.csv}) & \TODO{from summary table} \\
+    Embedding the corpus with BGE-M3 (once) & about 3\,s per chunk, about 3\,h \\
+    \bottomrule
+  \end{tabularx}
+  \caption{Measured times. Retrieval rows from \code{results/retrieval.csv} and the README; the
+  early-stop row from commit \code{174cef4}.}
+  \label{tab:latency}
+\end{table}
+
+\subsection{Answers with the language models}
+
+Five systems run with each model: \code{rag_dense} (dense retrieval, similarity gate),
+\code{rag_hybrid} (with BM25 fused in), \code{rag_rerank} (hybrid passages, cross-encoder gate; the
+app's default), and the two baselines the course requires, \code{bm25_rag} (5 BM25 passages, same
+prompt and citation check, no gate) and \code{no_rag} (the model alone). The metrics are the answer
+rate on A01--A20, the refusal rate on O01--O10, the refusal rate on N01--N10, hit rate, context
+precision, faithfulness judged by the default model, the number of judged answers and the mean
+latency. The plan in \code{scripts/run_evaluation.py} is the five systems with
+\nolinkurl{nvidia/nemotron-3-ultra-550b-a55b:free}, then \code{rag_rerank} with
+\nolinkurl{google/gemma-4-31b-it:free}.
+
+\IfFileExists{\gen/summary_table.tex}{\input{\gen/summary_table.tex}}{\TODO{summary table: \code{docs/report/generated/summary_table.tex}, from \code{results/summary.csv}}}
+
+\TODO{two or three sentences on the summary table once the run is complete: refusal of the held-out
+questions per gate, faithfulness, \code{no_rag} against the RAG systems, the second model}
+
+\TODO{human ratings: mean \code{correct_0_1}, \code{safety_1_5} and \code{clarity_1_5} from
+\nolinkurl{results/human_rating_sheet.csv}, with the number of rated rows}
+
+\begin{figure}[htbp]
+  \centering
+  \fbox{\parbox[c][2.2cm][c]{0.8\textwidth}{\centering\TODO{screenshot of the app answering A06, with
+  the sources table (\code{07_EXTRA/screenshots/})}}}
+  \caption{The Gradio app.}
+  \label{fig:app}
+\end{figure}

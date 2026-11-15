@@ -1,0 +1,47 @@
+\section{Limits}
+\label{sec:limits}
+
+\begin{itemize}[leftmargin=1.5em]
+  \item \textbf{Not medical advice.} A wrong or outdated answer can hurt a patient. The app shows the
+        disclaimer on the page and under every answer.
+  \item \textbf{Small, frozen corpus.} 50 documents downloaded in November 2026. Guidelines go out of
+        date, and many real questions are outside the corpus and are refused.
+  \item \textbf{The citation check is shallow.} It proves that cited numbers exist, not that a
+        passage supports the claim next to it, and it does not require a citation after every claim.
+        Range markers such as \texttt{[21--24]} in a passage are not rewritten.
+  \item \textbf{Each gate is one number.} Too high refuses answerable questions; too low lets weakly
+        related passages through. 0.6 was checked on the same 30 questions it is reported on. The
+        cross-encoder was trained on web search (MS MARCO), not on medicine.
+  \item \textbf{Few questions.} 20 answerable, 10 out of corpus and 10 held out. One question changes
+        a rate by 0.05 or 0.10.
+  \item \textbf{Relevance per document.} A passage counts as relevant only if it comes from the
+        question's source document, so another document that also answers the question counts as a
+        miss in hit rate and context precision.
+  \item \textbf{The judge is a model.} Faithfulness is judged by the first model of
+        \code{FREE_MODELS}, the same as the default generator, so in a comparison of models it may
+        favour that model. No automatic metric compares an answer with the ground truth; only the
+        human \code{correct_0_1} column does, and it is the only check of \code{no_rag}.
+  \item \textbf{Chunk size not tuned.} 512/102 comes from the brief; we did not compare other sizes.
+  \item \textbf{Free models.} They are rate-limited, slow, and can return an empty reply or fail.
+        The 50-request daily quota spreads one evaluation over several days.
+  \item \textbf{Privacy.} The corpus holds no patient data, but every question is sent to OpenRouter
+        with the retrieved passages, so a user must not type anything that identifies a patient.
+        \code{results/records.jsonl} stores the evaluation questions and answers, and
+        \code{results/llm_cache.jsonl} the model replies.
+\end{itemize}
+
+\paragraph{Sources.}
+Okapi BM25: Robertson and Zaragoza, ``The Probabilistic Relevance Framework: BM25 and Beyond'', 2009;
+the idf variant of Apache Lucene's \code{BM25Similarity}. BM25 was built following
+\url{https://stevenloria.com/tf-idf/} and
+\url{https://boyter.org/2010/08/build-vector-space-search-engine-python/}.
+Reciprocal rank fusion: Cormack, Clarke and Buettcher, SIGIR 2009,
+\url{https://doi.org/10.1145/1571941.1572114}; \code{rrf} has the structure of
+\nolinkurl{reciprocal_rank_fusion} in \url{https://github.com/langchain-ai/rag-from-scratch}.
+Cross-encoders: Nogueira and Cho, ``Passage Re-ranking with BERT'', 2019,
+\url{https://arxiv.org/abs/1901.04085}; MedCPT, Jin et al., Bioinformatics 2023,
+\url{https://doi.org/10.1093/bioinformatics/btad651}.
+RAGAS: Es et al., 2023, \url{https://arxiv.org/abs/2309.15217}.
+
+\paragraph{Tools used.}
+Claude (Anthropic) was used to write the project's code and documentation, including this document.

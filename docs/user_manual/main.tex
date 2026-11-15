@@ -1,0 +1,255 @@
+% User manual of the RAG on Medical Documents app, for a reader who is not a developer.
+% Build from this folder: pdflatex main.tex
+\documentclass[11pt,a4paper]{article}
+
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage{microtype}
+\usepackage[a4paper,margin=2.3cm,headheight=14pt]{geometry}
+\usepackage{booktabs}
+\usepackage{tabularx}
+\usepackage{array}
+\usepackage{xcolor}
+\usepackage{enumitem}
+\usepackage{fancyhdr}
+\usepackage{caption}
+\usepackage{float}
+\usepackage{listings}
+\usepackage{xurl}
+\usepackage[hidelinks]{hyperref}
+
+\newcommand{\TODO}[1]{\textcolor{red}{\textbf{[TODO: #1]}}}
+\newcommand{\code}[1]{\texttt{\detokenize{#1}}}
+\newcommand{\ui}[1]{\textsf{\textbf{#1}}}  % a label shown in the app
+\newcommand{\shot}[2]{%
+  \begin{figure}[H]\centering
+  \fbox{\parbox[c][#1][c]{0.85\textwidth}{\centering\TODO{screenshot: #2}}}
+  \end{figure}}
+
+\lstset{basicstyle=\ttfamily\small, breaklines=true, columns=fullflexible,
+        frame=single, rulecolor=\color{black!25}, backgroundcolor=\color{black!3},
+        xleftmargin=0.5em, xrightmargin=0.5em, aboveskip=0.5em, belowskip=0.5em}
+\setlist{itemsep=0.2em, topsep=0.3em}
+\setlength{\parskip}{0.4em}
+\setlength{\parindent}{0pt}
+\renewcommand{\arraystretch}{1.2}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\small \TODO{school name}}
+\fancyhead[R]{\small Group \TODO{NN} -- RAG on Medical Documents}
+\fancyfoot[C]{\small \thepage}
+
+\begin{document}
+
+\begin{center}
+  {\LARGE\bfseries RAG on Medical Documents}\\[0.3em]
+  {\Large User manual}\\[0.6em]
+  Boussoualim Yassine \quad Benahcene Mohamed Wassim \quad Aissaoui Anes Safouane \quad Djerdali Mohamed Achraf\\[0.2em]
+  Group \TODO{group number} \quad -- \quad \TODO{school header}\\
+  LLM Final Projects 2026-2027, Prof.\ A.\ Moussaoui, Project 2
+\end{center}
+
+\section*{What this tool does}
+
+You type a medical question. The tool looks for the passages that answer it in 50 documents: 20
+guidelines of the World Health Organization (WHO) and 30 open-access articles from PubMed Central.
+A free language model then writes an answer from those passages only, and names its source after
+each claim. If the documents do not contain the answer, the tool says so instead of guessing:
+
+\begin{center}
+\emph{I cannot answer this question from the provided documents.}
+\end{center}
+
+\noindent\fcolorbox{red!60!black}{red!4}{\parbox{0.96\textwidth}{\textbf{Important.}
+This tool is a student project. It is not medical advice. Check every answer with a clinician.
+Questions are sent to OpenRouter, an online service: do not type anything that identifies a
+patient (name, date of birth, file number, address).}}
+
+The app shows this warning at the top of the page and under every answer.
+
+\section*{1. What you need}
+
+\begin{itemize}[leftmargin=1.5em]
+  \item A Linux computer with Python 3.12 and an internet connection.
+  \item Several gigabytes of free disk space: the tool downloads its own language models (the largest is about 2\,GB) and the documents.
+  \item A free key from OpenRouter (\url{https://openrouter.ai}). The key is a long text that lets
+        the tool use the free models of your account. The tool only uses free models.
+  \item Time: building the search index takes about 3 hours on a laptop, but only once. After that,
+        the app starts much faster.
+\end{itemize}
+
+All the commands below are typed in a terminal, in the project folder (the folder that contains
+\code{README.md}). Type each line, then press Enter.
+
+\section*{2. Install}
+
+\begin{lstlisting}
+python3 -m venv .venv
+.venv/bin/pip install -r requirements.txt
+\end{lstlisting}
+
+The first line creates a private Python environment in the folder \code{.venv}. The second
+installs the libraries the tool needs, including PyTorch; the download can take several
+minutes. On Debian or Ubuntu, if the first line fails, install the missing package first with
+\code{sudo apt install python3-venv}, then try again.
+
+\section*{3. Put your key in \texttt{.env}}
+
+\begin{lstlisting}
+cp .env.example .env
+\end{lstlisting}
+
+Open the new file \code{.env} with a text editor. It has two lines. Paste your key right after the
+equals sign of the first line, with no space and no quotes:
+
+\begin{lstlisting}
+OPENROUTER_API_KEY=your-key-here
+OPENROUTER_MODEL=nvidia/nemotron-3-ultra-550b-a55b:free
+\end{lstlisting}
+
+Save the file. Leave the second line as it is. Keep this file private: never send it, never put it
+online, never add it to git.
+
+\section*{4. Get the documents and build the index}
+
+\begin{lstlisting}
+.venv/bin/python scripts/fetch_corpus.py --from-manifest
+.venv/bin/python src/index.py
+\end{lstlisting}
+
+The first command downloads the 50 documents. It prints one line per file and ends with a count
+such as \code{done: 50/50 files written}. If a few files failed, run it again.
+
+The second command builds the search index: it reads every document, cuts it into short passages
+and computes a numeric fingerprint of each one. The first time, it downloads a model of about 2\,GB.
+Then it prints its progress regularly, with an estimate of the minutes left. It takes about
+3 hours on a laptop. You can stop it (Ctrl+C) or lose power: run the same command again and it
+continues where it stopped. It ends with a line that starts with \code{indexed}. You only do this
+once.
+
+\section*{5. Start the app}
+
+\begin{lstlisting}
+.venv/bin/python src/app.py
+\end{lstlisting}
+
+The first start downloads one more model (about 90\,MB). When the terminal shows the address, open
+\url{http://127.0.0.1:7860} in your web browser. The app runs on your own computer; leave the
+terminal open while you use it, and press Ctrl+C in the terminal to stop it.
+
+\shot{4.2cm}{the app's page when it opens, empty (\code{07_EXTRA/screenshots/})}
+
+\section*{6. Ask a question}
+
+\begin{enumerate}[leftmargin=1.5em]
+  \item Type your question in the \ui{Question} box, in English, as one full sentence. Or click one
+        of the three examples under the page; they fill the box for you.
+  \item Click \ui{Ask}, or press Enter in the box.
+  \item Wait. An answer usually takes a few seconds; in our tests between about 2 and 18 seconds.
+        A refusal often comes back in under a second, because the model is not asked at all.
+\end{enumerate}
+
+The other controls can stay as they are:
+
+\begin{itemize}[leftmargin=1.5em]
+  \item \ui{Model}: which free language model writes the answer. The default is
+        \nolinkurl{nvidia/nemotron-3-ultra-550b-a55b:free}. If one model keeps failing, try
+        another. (The app always starts with this default, whatever \code{.env} says.)
+  \item \ui{Retrieval and refusal gate}: how passages are found and how the tool decides to refuse.
+        Keep the default, \ui{Hybrid + cross-encoder gate}. \ui{Dense} and
+        \ui{Hybrid (dense + BM25)} are simpler methods, kept for comparison.
+  \item \ui{Refusal threshold}: how sure the tool must be before it answers. Higher means more
+        refusals. Changing the mode puts the slider back to that mode's default (0.5 for the
+        cross-encoder gate, 0.6 for the two others).
+\end{itemize}
+
+\section*{7. Read the answer and its citations}
+
+Each claim of an answer is followed by its source in square brackets:
+
+\begin{itemize}[leftmargin=1.5em]
+  \item A WHO guideline, with the file name and the page number, for example\\
+        \code{[WHO_09_Guidelines_for_the_treatment_of_malaria.pdf, p. 14]}.\\
+        Open that PDF at that page to check the claim.
+  \item \code{[article title]}: a PubMed Central article, named by its title. Articles have no page.
+\end{itemize}
+
+Under the answer, a table lists the five passages the tool found, best first:
+
+\begin{center}\small
+\begin{tabularx}{0.95\textwidth}{@{}l X@{}}
+  \toprule
+  Column & Meaning \\
+  \midrule
+  \ui{\#} & Rank of the passage, 1 to 5. \\
+  \ui{Source} & File name of the WHO guideline, or title of the article. \\
+  \ui{Page} & Page in the PDF; \code{-} for an article. \\
+  \ui{Similarity} & How close the passage is to the question, from 0 to 1; \code{-} for a passage found only by keyword search. \\
+  \ui{Cited} & \code{yes} if the answer cites this passage. \\
+  \bottomrule
+\end{tabularx}
+\end{center}
+
+The tool checks that every citation points at one of these five passages. It does \emph{not}
+check that the passage really says what the sentence claims. Always read the cited page before you
+rely on an answer.
+
+\shot{4.6cm}{an answer to ``How long should parenteral artesunate be given to a patient with severe
+malaria?'' with its sources table (\code{07_EXTRA/screenshots/})}
+
+\section*{8. What a refusal means}
+
+A refusal is the sentence \emph{I cannot answer this question from the provided documents.},
+followed by a short reason. It is not an error. It means the tool did not find support for an
+answer in its 50 documents, so it did not guess. The reason tells you why:
+
+\begin{center}\small
+\begin{tabularx}{0.95\textwidth}{@{}>{\raggedright\arraybackslash}p{6.2cm} X@{}}
+  \toprule
+  Reason shown & What it means \\
+  \midrule
+  The cross-encoder rates the best passage 0.16, below the threshold. & None of the five passages answers the question (default mode). \\
+  Best similarity 0.41 is below the threshold. & No passage is close enough to the question (other modes). \\
+  The retrieved passages do not contain the answer. & The model read the passages and found no answer in them. \\
+  The model's answer did not cite the retrieved passages. & The model wrote an answer without valid citations, so it was not shown. \\
+  \bottomrule
+\end{tabularx}
+\end{center}
+
+The numbers change with each question. The documents cover hypertension, diabetes, malaria,
+tuberculosis, HIV and antenatal care, among others; many questions outside them are refused. You
+can rephrase the question. Do not lower the threshold just to get an answer: a lower threshold
+lets in passages that do not answer the question.
+
+\shot{3.8cm}{a refusal, for example ``What is the first-line topical treatment for scabies?''
+(\code{07_EXTRA/screenshots/})}
+
+\section*{9. Troubleshooting}
+
+\begin{center}\small
+\begin{tabularx}{\textwidth}{@{}>{\raggedright\arraybackslash}p{6.6cm} X@{}}
+  \toprule
+  What you see & What to do \\
+  \midrule
+  In the terminal, the app does not start:\newline
+  \code{OPENROUTER_API_KEY is missing: copy .env.example to .env and add your key.}
+  & Do step 3: create \code{.env} and paste your key after the equals sign. \\
+  In the terminal, the app does not start:\newline
+  \code{The index is empty: run .venv/bin/python src/index.py first.}
+  & Do step 4. If the build was interrupted, run the same command again to finish it. \\
+  In the app: \code{Type a question first.} & The question box was empty. \\
+  In the app: \code{The model call failed: ...} followed by \code{HTTP Error 401} & The key in \code{.env} is wrong or was revoked. Paste a valid key, then restart the app. \\
+  In the app: \code{The model call failed: the daily free-model limit of the OpenRouter account is used up; it resets at 00:00 UTC} & The account's free requests for today are used up (50 a day). Try again after 00:00 UTC (01:00 in Paris in winter). \\
+  In the app: \code{The model call failed: ...} with another message, after a long wait & The free model is busy. The tool already retried several times. Try again later or pick another \ui{Model}. \\
+  The browser cannot open \url{http://127.0.0.1:7860} & Check that the terminal running the app is still open and shows no error. \\
+  \code{python3 -m venv .venv} fails & On Debian or Ubuntu: \code{sudo apt install python3-venv}, then repeat step 2. \\
+  \bottomrule
+\end{tabularx}
+\end{center}
+
+\vfill
+{\small\textit{Claude (Anthropic) helped draft this manual.}}
+
+\end{document}

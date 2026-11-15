@@ -1,0 +1,99 @@
+\section{Difficulties and solutions}
+\label{sec:difficulties}
+
+Each item names the problem, how we noticed it, and what the code does now. The commit that made the
+change is given when there is one.
+
+\paragraph{Threshold direction.}
+The code skeleton of the brief refuses when \code{hits[0][1] > 0.6}, but Chroma returns distances,
+where lower means closer, while the brief says ``refuse if similarity $<$ 0.6''. The two conditions
+point in opposite directions. \emph{Solution:} the collection uses cosine distance, \code{retrieve}
+converts each hit to a similarity with $1 - d$, and the gate refuses when \code{best < threshold},
+so a similarity of exactly 0.6 passes. A test pins it: a distance of 0.45 (similarity 0.55) is
+refused, and the fake model it installs divides by zero if it is ever called.
+
+\paragraph{Scanned, short and encrypted PDFs.}
+One WHO file was a scan with no text layer, so pypdf extracted nothing, and another was a one-page
+summary. Both were replaced in the manifest by full WHO guidelines on the same topics (antenatal
+care, sodium intake); the full hypertension guideline was already in the corpus. Pages of 50
+characters or fewer are skipped, so a blank or scanned page gives no empty chunk. Two WHO PDFs
+(\code{WHO_09}, malaria, and \code{WHO_25}, antenatal care) are AES-encrypted; pypdf opens them once
+\code{cryptography} is installed, so it is pinned in \code{requirements.txt}. We did not add OCR.
+
+\paragraph{PubMed PDFs refused to scripts.}
+Europe PMC answers HTTP 403 when a script asks for an article PDF, while its full-text XML is
+reliable. \emph{Solution:} \code{fetch_corpus.py} keeps the text of every \code{<p>} element and
+rejects a body under 2{,}000 characters. A PubMed article has no page, so it is cited by its title.
+
+\paragraph{Reference markers taken for citations} (\code{e954e62}).
+Articles cite their own references as \code{[12]} or \code{[3, 4]}, the same shape as our citations.
+A copied \code{[3]} would pass the check while pointing at the wrong passage, and a copied
+\code{[12]} would turn a good answer into a refusal. \emph{Solution:} \code{format_context} shows
+these markers to the model as \code{(12)} and \code{(3, 4)}. Range markers such as \texttt{[21--24]}
+still pass through unchanged.
+
+\paragraph{Rate limits of the free models.}
+Free models answer HTTP 429 or 5xx, or an empty reply, when the provider is busy. \emph{Solution:}
+\code{call_llm} makes up to four attempts, with pauses of 10, 20 and 40\,s; other HTTP errors, such
+as 401 for a bad key, are raised at once. The app shows ``The model call failed: \ldots'' instead of
+crashing. In the evaluation, a model that fails three questions in a row is dropped for the rest of
+that run.
+
+\paragraph{50 free requests a day} (\code{23d0209}, \code{9d809f7}).
+OpenRouter allows this account 50 free-model requests per UTC day. One model with the judge on the
+original 30 questions needs at most 170 requests with the reply cache (210 without), so the
+evaluation cannot run in one day. \emph{Solution:} a 429 whose body names
+\code{free-models-per-day} raises \code{QuotaExhausted} at once, with no pointless retry. \code{run}
+then stops, writes the summary of the records so far, and resumes where it stopped on a later day.
+\code{scripts/run_evaluation.py} runs once a day, checks the requests left before sending anything,
+refuses a second run at the same time (lock file) and logs everything.
+
+\paragraph{Reasoning models use up \code{max_tokens}} (\code{30bcabb}, \code{514c930}).
+The default model reasons before it writes, and the budget counts that hidden reasoning. The judge
+needs about 1{,}000 tokens of reasoning to split an answer into claims, so with 600 tokens it never
+wrote its JSON: the judge now gets 4{,}000 tokens. On question A19, the answer itself used all 600
+tokens and came back empty; this happened once in about 50 answers of the first run. At
+temperature 0 the same request fails the same way, and every later run would have spent one more
+daily request on it. \emph{Solution:} \code{call_llm} resends such a request once, at once, with
+4{,}000 tokens, and raises only if that is cut too. A reply that fits in 600 tokens is unchanged, so
+the stored replies stay valid.
+
+\paragraph{The \code{no_rag} baseline refused everything} (\code{30bcabb}).
+Its prompt named ``the provided documents'' in the refusal sentence without giving any, so the model
+refused every question. The prompt now says that no documents are given and asks the model to
+answer from its own knowledge.
+
+\paragraph{Identical requests sent twice} (\code{0151e2f}).
+\code{rag_hybrid} and \code{rag_rerank} retrieve the same passages. For a question that both gates
+let through, they sent the same prompt and then the same judge prompt. \emph{Solution:} every model
+call of \code{run} goes through \code{ReplyCache}, keyed by the SHA-256 of the model, the prompt and
+the token budget, and stored in \code{results/llm_cache.jsonl} with the seconds the call took (the
+file holds neither the prompt nor the key). The second system reuses the replies: two requests saved
+per such question and model, and the two systems now differ only by their gate. A reused answer is
+marked \code{reused} and its latency includes the original call, so latencies stay comparable.
+
+\paragraph{The cosine gate had almost no margin} (\code{3e19817}, \code{174cef4}).
+See Section~\ref{sec:choices}: O06 passed under 0.6 by 0.012. The MiniLM cross-encoder gate, at its
+untuned 0.5 boundary, leaves a wide gap (0.156 against 0.870) and became the default mode. Scoring
+one passage at a time and stopping at the first that passes cut the time of an answerable question
+from about 0.7\,s to 0.3\,s.
+
+\paragraph{The question set could not tell the gates apart} (\code{48739a1}).
+On the original 30 questions, every gated system refuses every out-of-corpus question and answers
+every answerable one, and three of the out-of-corpus questions are general-knowledge trivia.
+\emph{Solution:} 10 held-out questions, N01 to N10, on topics the corpus covers (hypertension,
+diabetes, malaria, tuberculosis, HIV, antenatal care, paracetamol, pulmonary hypertension) but asking
+for a fact it does not contain. They were written with keyword searches of the corpus text only and
+committed before any system ran on them, and no threshold was chosen or changed with them.
+
+\paragraph{Slow embedding on a CPU.}
+BGE-M3 takes about 3\,s per chunk on a laptop CPU, about 3 hours for the corpus. Losing that to one
+crash was the risk. \emph{Solution:} the build saves every 96 chunks and resumes from the ids already
+stored (Section~\ref{sec:components}). We did not need a GPU or Colab.
+
+\paragraph{Smaller guards.}
+The evaluation stores the threshold in each record and refuses to mix records made at two
+thresholds. A failed judge call writes no record, so the next run takes the answer from the cache
+and sends only the judge request. A line of a JSONL file cut by a crash is skipped with a warning.
+\code{load_context} reports ``index is empty'' only for Chroma's \code{NotFoundError}, so other
+database errors are not hidden (\code{c354aa8}).
