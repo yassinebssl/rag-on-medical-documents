@@ -6,6 +6,6 @@
 
 \paragraph{Models used by the system.} The free OpenRouter models, BGE-M3 and the cross-encoders listed in Section~\ref{sec:setup} answer, retrieve and gate; they did not write this report.
 
-\paragraph{Libraries.} PyTorch (CPU), sentence-transformers, chromadb, pypdf, cryptography, Gradio and pytest.
+\paragraph{Libraries.} PyTorch (CPU), sentence-transformers, chromadb, pypdf, cryptography, FastAPI, uvicorn, Gradio and pytest.
 
 \paragraph{Borrowed code and tutorials.} BM25 follows two tutorials listed by \emph{build-your-own-x} \citep{buildyourownx}: term and document frequencies after \citet{loria_tfidf}, and the inverted index after \citet{boyter_vsm}; the formula is from \citet{robertson2009bm25}, with the idf variant of Lucene \citep{lucenebm25}. The function \code{rrf} has the structure of \code{reciprocal_rank_fusion} in the \emph{rag-from-scratch} tutorial \citep{ragfromscratch}. Both are credited in comments in the code.

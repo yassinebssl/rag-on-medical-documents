@@ -4,7 +4,7 @@
 The code is seven Python files in \code{src/} and four scripts in \code{scripts/}
 (Table~\ref{tab:files}). Every function and class has a docstring. The dependencies are pinned in
 \code{requirements.txt}: PyTorch 2.15.0 (CPU build), sentence-transformers 6.3.0, chromadb 1.5.9,
-pypdf 7.1.0, cryptography 50.0.2, gradio 6.32.0 and pytest 9.2.0. The OpenRouter call uses only
+pypdf 7.1.0, cryptography 50.0.2, FastAPI 0.162.7, uvicorn 0.54.0, gradio 6.32.0 and pytest 9.2.0. The OpenRouter call uses only
 the standard library (\code{urllib}).
 
 \begin{table}[H]
@@ -18,7 +18,8 @@ the standard library (\code{urllib}).
     \code{src/bm25.py} & Okapi BM25 over the chunks, written from scratch with the standard library. & \code{k1} 1.5, \code{b} 0.75 \\
     \code{src/rag.py} & Retrieval, fusion, both gates, prompt, OpenRouter call, citation check, command line. & \code{TOP_K} 5, \code{CANDIDATES} 20, \code{SIM_THRESHOLD} 0.6, \code{RERANK_THRESHOLD} 0.5 \\
     \code{src/rerank.py} & Cross-encoder scoring: the gate score and reordering. & \code{GATE_RERANKER} \code{minilm} \\
-    \code{src/app.py} & Gradio page: question, model, mode, threshold, answer, sources table. & \code{DISCLAIMER}, \code{MODES} \\
+    \code{src/app.py} & FastAPI server: the question page, \code{/api/config}, \code{/api/ask}, the Gradio page at \code{/gradio}. & \code{DISCLAIMER}, \code{MODES} \\
+    \code{src/gradio_app.py} & Gradio page of the earlier version: question, model, mode, threshold, answer, sources table. & \code{build_app} \\
     \code{src/evaluate.py} & Retrieval comparison, threshold sweep, evaluation of five systems. & \code{THRESHOLDS}, \code{JUDGE_MAX_TOKENS} 4000 \\
     \midrule
     \code{scripts/fetch_corpus.py} & Downloads the corpus, from the manifest or by topic search. & 15 MB cap per PDF \\
@@ -62,13 +63,17 @@ is used only by the retrieval comparison. Three models are registered: \code{min
 (\code{cross-encoder/ms-marco-MiniLM-L6-v2}, the gate), \code{medcpt}
 (\code{ncbi/MedCPT-Cross-Encoder}) and \code{bge} (\code{BAAI/bge-reranker-v2-m3}).
 
-\paragraph{App (\code{app.py}).}
-A Gradio page on \url{http://127.0.0.1:7860} with a question box, a model menu limited to the five
-free models of \code{FREE_MODELS}, a choice of mode (default: hybrid + cross-encoder gate), a
-threshold slider from 0 to 1 that applies to the gate of the chosen mode, the answer with the
-disclaimer, and a table of the five passages with their page, similarity and whether they were
-cited. Changing the mode resets the slider to that gate's default (0.6 or 0.5). An empty question
-and a failed model call become a message instead of a crash.
+\paragraph{App (\code{app.py}, \code{web/}).}
+A FastAPI server on \url{http://127.0.0.1:7860} (\code{HOST} and \code{PORT} override it). The page
+in \code{src/web/} reads its choices from \code{GET /api/config}: the five free models of
+\code{FREE_MODELS}, the three modes (default: hybrid + cross-encoder gate) and a gate threshold that
+resets to the chosen mode's default (0.6 or 0.5). \code{POST /api/ask} takes the question, the
+choices and the earlier turns, and returns the verdict, the answer as escaped HTML with numbered
+citation markers, the five passages, and the time of the search and gate and of the model. The server
+keeps no conversation and answers one question at a time. An empty question, an unknown model and a
+failed model call become a verdict instead of a crash; after a failed call the page still shows the
+passages and the search time. \code{src/gradio_app.py}, the earlier Gradio page, is mounted at
+\code{/gradio} with its footer links removed.
 
 \paragraph{Evaluation (\code{evaluate.py}, \code{run_evaluation.py}).}
 \code{run} is resumable: each answer is appended to \nolinkurl{results/records.jsonl} with the threshold

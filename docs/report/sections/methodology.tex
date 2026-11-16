@@ -102,7 +102,7 @@ The check confirms that the cited numbers exist, not that a passage supports the
 
 \subsection{Application}
 
-\code{src/app.py} is a Gradio page \citep{gradio} with a question box, a model menu (free models only), the retrieval mode and a threshold slider. It shows the answer, the reason for a refusal, and a table of the five passages with source, page, similarity and whether they were cited. The page and every answer carry a disclaimer: not medical advice, check with a clinician, and type nothing that identifies a patient.
+\code{src/app.py} is a FastAPI server for a question page (\code{src/web/}) built for the defense projector. Each answer appears in a ruled box whose head gives the verdict, the gate score and two times: the local search and gate, and the model's reply. Below it, a table lists the five passages with source, page, similarity and whether they were cited, and the answer's citation markers point at those rows. The page keeps a conversation: the model sees the last three turns, and a question that the gate refuses alone is searched again joined to the previous question, so that a follow-up such as ``and for a child?'' finds its topic. A question that passes alone is searched alone, and without earlier turns the pipeline is the one the evaluation measured. The Gradio page \citep{gradio} of the earlier version, with the same pipeline, runs on the same server at \code{/gradio}. Both pages carry a disclaimer: not medical advice, check with a clinician, and type nothing that identifies a patient.
 
 \subsection{Evaluation metrics}
 \label{sec:metrics}

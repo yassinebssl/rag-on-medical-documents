@@ -136,7 +136,8 @@ Files of `src/`:
 | `rag.py` | Retrieval, similarity and cross-encoder gates, prompt, OpenRouter call, citation check, reciprocal rank fusion, and the command line. |
 | `rerank.py` | Cross-encoder scoring: the refusal gate score and reranking. |
 | `evaluate.py` | Evaluation of five systems on the question set, the retrieval comparison and the threshold sweep. |
-| `app.py` | Gradio app: question box, model, retrieval mode and threshold controls, answer, and a table of the retrieved sources. |
+| `app.py` | FastAPI server: the question page in `web/` (conversation, verdict, cited answer, passages, search and model times), `/api/config`, `/api/ask`, and the Gradio page at `/gradio`. |
+| `gradio_app.py` | The Gradio page of the earlier version: question box, model, retrieval mode and threshold controls, answer, and a table of the retrieved sources. |
 
 ## Evaluation
 
@@ -185,7 +186,7 @@ The retrieval comparison on the 40 questions (no LLM call, `results/retrieval.cs
 
 ## Tools and sources
 
-Libraries: PyTorch (CPU), sentence-transformers, chromadb, pypdf, cryptography (to read encrypted PDFs), gradio and pytest. The embedding model is `BAAI/bge-m3`. The cross-encoder of the refusal gate is `cross-encoder/ms-marco-MiniLM-L6-v2`; `ncbi/MedCPT-Cross-Encoder` and `BAAI/bge-reranker-v2-m3` are compared with it. The language models are free models served by OpenRouter.
+Libraries: PyTorch (CPU), sentence-transformers, chromadb, pypdf, cryptography (to read encrypted PDFs), FastAPI and uvicorn (the web app), gradio (the page at `/gradio`) and pytest. The embedding model is `BAAI/bge-m3`. The cross-encoder of the refusal gate is `cross-encoder/ms-marco-MiniLM-L6-v2`; `ncbi/MedCPT-Cross-Encoder` and `BAAI/bge-reranker-v2-m3` are compared with it. The language models are free models served by OpenRouter.
 
 References:
 

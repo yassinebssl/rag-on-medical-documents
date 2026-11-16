@@ -56,6 +56,14 @@ Passages:
 Question: {question}
 Answer (with citations):"""
 
+# The app's follow-up questions: the earlier turns help the model read the question, never as a source.
+CONVERSATION = """Earlier in this conversation (use it only to understand what the question refers to;
+answer only from the passages, never from these earlier answers):
+{turns}
+
+"""
+HISTORY_TURNS = 3  # earlier turns given to the model; retrieval uses the last question only
+
 
 def load_env(path=os.path.join(ROOT, ".env")):
     """Read KEY=VALUE pairs from .env without printing them."""
@@ -167,11 +175,25 @@ def expand_citations(answer, hits):
                                           for n in m.group(1).split(",")), answer)
 
 
-def generate_answer(question, hits, model, api_key):
-    """Ask the LLM about the given passages; keep the answer only if its citations are valid."""
+def conversation_block(history):
+    """Return the CONVERSATION block for the last HISTORY_TURNS (question, answer) pairs, or "" without history.
+
+    Source labels in [brackets] are dropped from the earlier answers, so that the model cannot copy
+    them as citations.
+    """
+    turns = "\n".join(f"Q: {q}\nA: {re.sub(r' ?\[[^\]]*\]', '', a).strip()}" for q, a in history[-HISTORY_TURNS:])
+    return CONVERSATION.format(turns=turns) if turns else ""
+
+
+def generate_answer(question, hits, model, api_key, history=()):
+    """Ask the LLM about the given passages; keep the answer only if its citations are valid.
+
+    history holds earlier (question, answer) pairs of a conversation; it goes before the passages.
+    """
     if not hits:
         return {"answer": REFUSAL, "refused": True, "reason": "no_context", "hits": hits, "cited": []}
-    raw = call_llm(PROMPT.format(context=format_context(hits), question=question), model, api_key)
+    prompt = PROMPT.format(context=format_context(hits), question=question)
+    raw = call_llm(conversation_block(history) + prompt, model, api_key)
     refused = {"answer": REFUSAL, "refused": True, "hits": hits, "cited": [], "raw": raw}
     if REFUSAL.lower() in raw.lower():
         return {**refused, "reason": "model_refused"}
@@ -201,35 +223,63 @@ def rrf(rankings, k=60):
     return [first[i] for i in sorted(scores, key=lambda i: -scores[i])]
 
 
+def search_and_gate(search, embedder, collection, threshold, bm25, reranker, rerank_threshold):
+    """Retrieve for one search text and apply the gate; return hits, best similarity, rerank score, refuse, reason."""
+    if bm25 is None:
+        hits = retrieve(search, embedder, collection)
+        best = hits[0]["similarity"] if hits else 0.0
+    else:
+        dense = retrieve(search, embedder, collection, k=CANDIDATES)
+        best = dense[0]["similarity"] if dense else 0.0
+        hits = rrf([dense, bm25.search(search, CANDIDATES)])[:TOP_K]
+    rerank_score = None
+    if reranker is not None:
+        from rerank import gate_score
+
+        rerank_score = gate_score(search, hits, reranker, stop_at=rerank_threshold)
+        return hits, best, rerank_score, rerank_score < rerank_threshold, "below_rerank_threshold"
+    return hits, best, rerank_score, best < threshold, "below_threshold"
+
+
 def answer_question(question, embedder, collection, model, api_key, threshold=SIM_THRESHOLD,
-                    bm25=None, reranker=None, rerank_threshold=RERANK_THRESHOLD):
+                    bm25=None, reranker=None, rerank_threshold=RERANK_THRESHOLD, history=()):
     """Retrieve (fused with BM25 if given), refuse below the gate's threshold, else generate_answer.
 
     The gate is the best dense similarity against threshold, or, with a reranker,
     the cross-encoder gate score against rerank_threshold. The cross-encoder stops at
     the first passage that reaches rerank_threshold, so rerank_score is that passage's
     score when the question is answered and the best score when it is refused.
-    """
-    if bm25 is None:
-        hits = retrieve(question, embedder, collection)
-        best = hits[0]["similarity"] if hits else 0.0
-    else:
-        dense = retrieve(question, embedder, collection, k=CANDIDATES)
-        best = dense[0]["similarity"] if dense else 0.0
-        hits = rrf([dense, bm25.search(question, CANDIDATES)])[:TOP_K]
-    rerank_score = None
-    if reranker is not None:
-        from rerank import gate_score
 
-        rerank_score = gate_score(question, hits, reranker, stop_at=rerank_threshold)
-        refuse, reason = rerank_score < rerank_threshold, "below_rerank_threshold"
-    else:
-        refuse, reason = best < threshold, "below_threshold"
+    history holds the earlier (question, answer) pairs of an app conversation, and the model sees them.
+    When the gate refuses the question alone, retrieval and the gate run again on the last earlier
+    question joined to this one, so that a follow-up such as "and for children?" finds its topic;
+    follow_up says whether that joined search was used. A question that passes alone is searched alone,
+    so a new topic is not mixed with the last one. Without history, the behaviour is the one the
+    evaluation measured. search_s and model_s time the two steps; model_s is None when the model is
+    not called.
+    """
+    t0 = time.perf_counter()
+    gate = (embedder, collection, threshold, bm25, reranker, rerank_threshold)
+    hits, best, rerank_score, refuse, reason = search_and_gate(question, *gate)
+    follow_up = False
+    if refuse and history:
+        joined = search_and_gate(f"{history[-1][0]} {question}", *gate)
+        if not joined[3]:
+            (hits, best, rerank_score, refuse, reason), follow_up = joined, True
+    t1 = time.perf_counter()
+    model_s = None
     if refuse:
         res = {"answer": REFUSAL, "refused": True, "reason": reason, "hits": hits, "cited": []}
     else:
-        res = generate_answer(question, hits, model, api_key)
-    return {**res, "best_similarity": best, "rerank_score": rerank_score}
+        try:
+            res = generate_answer(question, hits, model, api_key, history)
+        except Exception as exc:  # the page still shows what the search found and how long it took
+            exc.partial = {"hits": hits, "best_similarity": best, "rerank_score": rerank_score,
+                           "search_s": t1 - t0, "follow_up": follow_up}
+            raise
+        model_s = time.perf_counter() - t1
+    return {**res, "best_similarity": best, "rerank_score": rerank_score, "search_s": t1 - t0, "model_s": model_s,
+            "follow_up": follow_up}
 
 
 def load_context():
@@ -239,7 +289,7 @@ def load_context():
     from rerank import GATE_RERANKER, load_reranker
     from chromadb.errors import NotFoundError
 
-    api_key = load_env().get("OPENROUTER_API_KEY")
+    api_key = load_env().get("OPENROUTER_API_KEY") or os.environ.get("OPENROUTER_API_KEY")  # a Space secret
     if not api_key:
         raise SystemExit("OPENROUTER_API_KEY is missing: copy .env.example to .env and add your key.")
     empty = "The index is empty: run .venv/bin/python src/index.py first."

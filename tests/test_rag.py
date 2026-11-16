@@ -7,7 +7,7 @@ import urllib.error
 import pytest
 
 import rag
-from conftest import FakeCollection, FakeEmbedder
+from conftest import FakeCollection, FakeEmbedder, FakeReranker
 
 WHO = {"id": "a", "text": "Artemether is given twice daily.", "source": "WHO_09.pdf", "page": 42, "similarity": 0.8}
 PMC = {"id": "b", "text": "Paracetamol 1 g.", "source": "Paracetamol dosing in adults.", "page": None, "similarity": 0.7}
@@ -301,3 +301,67 @@ def test_answer_question_without_a_reranker_has_no_rerank_score(monkeypatch):
     monkeypatch.setattr(rag, "call_llm", lambda *a, **k: "Twice daily [1].")
     res = rag.answer_question("q", FakeEmbedder(), FakeCollection(rows(0.1)), rag.DEFAULT_MODEL, "k")
     assert res["rerank_score"] is None
+
+
+def test_without_history_the_prompt_is_the_evaluated_one(monkeypatch):
+    prompts = []
+    monkeypatch.setattr(rag, "call_llm", lambda prompt, *a: prompts.append(prompt) or "Given twice daily [1].")
+    res = rag.answer_question("q", FakeEmbedder(), FakeCollection(rows(0.25)), rag.DEFAULT_MODEL, "k", threshold=0.6)
+    assert prompts[0].startswith("You are a medical assistant.") and "Earlier in this conversation" not in prompts[0]
+    assert res["search_s"] >= 0 and res["model_s"] >= 0
+
+
+def test_a_follow_up_refused_alone_is_searched_again_with_the_previous_question(monkeypatch):
+    searched, prompts = [], []
+    embedder = FakeEmbedder()
+    encode = embedder.encode
+    embedder.encode = lambda texts, **k: searched.extend(texts) or encode(texts, **k)
+    monkeypatch.setattr(rag, "call_llm", lambda prompt, *a: prompts.append(prompt) or "For children too [1].")
+    history = [("Max sodium for adults?", "Less than 2 g/day [WHO_04.pdf, p. 10].")]
+    res = rag.answer_question("and for children?", embedder, FakeCollection(rows(0.25)), rag.DEFAULT_MODEL, "k",
+                              reranker=FakeReranker([-5, -5, 5]), history=history)
+    assert searched == ["and for children?", "Max sodium for adults? and for children?"]
+    assert res["follow_up"] and res["reason"] == "answered"
+    assert "Q: Max sodium for adults?\nA: Less than 2 g/day." in prompts[0] and "WHO_04" not in prompts[0]
+    assert prompts[0].rstrip().endswith("Question: and for children?\nAnswer (with citations):")
+
+
+def test_a_new_topic_that_passes_alone_is_searched_alone(monkeypatch):
+    searched = []
+    embedder = FakeEmbedder()
+    encode = embedder.encode
+    embedder.encode = lambda texts, **k: searched.extend(texts) or encode(texts, **k)
+    monkeypatch.setattr(rag, "call_llm", llm("Paracetamol [1]."))
+    res = rag.answer_question("Paracetamol dose?", embedder, FakeCollection(rows(0.25)), rag.DEFAULT_MODEL, "k",
+                              reranker=FakeReranker([5]), history=[("Max sodium?", "Under 2 g.")])
+    assert searched == ["Paracetamol dose?"] and not res["follow_up"]
+
+
+def test_a_follow_up_refused_both_ways_keeps_the_refusal(monkeypatch):
+    monkeypatch.setattr(rag, "call_llm", lambda *a: 1 / 0)
+    res = rag.answer_question("scabies?", FakeEmbedder(), FakeCollection(rows(0.25)), rag.DEFAULT_MODEL, "k",
+                              reranker=FakeReranker([-5, -5, -5, -5]), history=[("Max sodium?", "Under 2 g.")])
+    assert res["refused"] and res["reason"] == "below_rerank_threshold" and not res["follow_up"]
+
+
+def test_a_failed_model_call_carries_what_the_search_found(monkeypatch):
+    def boom(*a):
+        """Fail like a rate-limited model."""
+        raise RuntimeError("429")
+    monkeypatch.setattr(rag, "call_llm", boom)
+    with pytest.raises(RuntimeError) as exc:
+        rag.answer_question("q", FakeEmbedder(), FakeCollection(rows(0.25)), rag.DEFAULT_MODEL, "k", threshold=0.6)
+    assert len(exc.value.partial["hits"]) == 2 and exc.value.partial["search_s"] >= 0
+
+
+def test_a_refusal_has_no_model_time(monkeypatch):
+    monkeypatch.setattr(rag, "call_llm", lambda *a: 1 / 0)
+    res = rag.answer_question("q", FakeEmbedder(), FakeCollection(rows(0.45)), rag.DEFAULT_MODEL, "k", threshold=0.6)
+    assert res["model_s"] is None and res["search_s"] >= 0
+
+
+def test_conversation_block_keeps_the_last_turns_only():
+    history = [(f"q{i}", f"a{i}") for i in range(5)]
+    block = rag.conversation_block(history)
+    assert "Q: q1" not in block and "Q: q2\nA: a2" in block and "Q: q4\nA: a4" in block
+    assert rag.conversation_block([]) == ""

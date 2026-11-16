@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RAG on Medical Documents</title>
+<meta name="description" content="Ask questions of 20 WHO guidelines and 30 PubMed Central articles. Each answer cites its passages; a question the documents do not cover is refused.">
+<link rel="preload" href="/assets/fonts/PublicSans-var.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/assets/fonts/SourceSerif4-var.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/assets/app.css">
+<link rel="icon" href="/assets/icon.svg" type="image/svg+xml">
+</head>
+<body>
+<header class="bar">
+  <div class="bar-inner">
+    <div class="brand">
+      <h1 class="name">RAG on Medical Documents</h1>
+      <p class="brand-line">50 documents · <a href="https://github.com/yassinebssl/rag-on-medical-documents">Source code</a> · <a href="/gradio/">Gradio</a></p>
+    </div>
+    <details class="settings" id="settings">
+      <summary class="settings-toggle">Settings</summary>
+      <div class="controls">
+        <label class="control">
+          <span class="control-label">Retrieval</span>
+          <select id="mode"></select>
+        </label>
+        <label class="control">
+          <span class="control-label">Model</span>
+          <select id="model"></select>
+        </label>
+        <label class="control control-narrow">
+          <span class="control-label">Gate</span>
+          <input id="threshold" type="number" min="0" max="1" step="0.05" inputmode="decimal">
+        </label>
+      </div>
+    </details>
+    <button class="button-bar" id="reset-bar" type="button" disabled>New conversation</button>
+  </div>
+</header>
+
+<main class="thread" id="thread" aria-live="polite">
+  <section class="empty" id="empty">
+    <p class="intro" id="intro">Answers come from 50 documents: 20 WHO guidelines and 30 PubMed Central articles. Each claim cites its source, and a question the documents do not cover is refused.</p>
+    <table class="examples">
+      <caption>Try one</caption>
+      <tbody id="examples"></tbody>
+    </table>
+  </section>
+</main>
+
+<footer class="compose-wrap">
+  <form class="compose" id="compose">
+    <label class="visually-hidden" for="question">Question</label>
+    <textarea id="question" rows="1" maxlength="1000" placeholder="Ask in English, as one full sentence" autofocus></textarea>
+    <button class="ask" id="ask" type="submit">Ask</button>
+    <button class="button-quiet" id="reset" type="button" disabled>New conversation</button>
+  </form>
+  <p class="disclaimer"><span id="disclaimer">This tool is a student project. It is not medical advice. Check every answer with a clinician. Questions are sent to OpenRouter: do not type anything that identifies a patient.</span></p>
+</footer>
+
+<template id="turn-template">
+  <article class="turn">
+    <h2 class="question"><span class="qnum"></span><span class="question-text"></span></h2>
+    <p class="follow-up" hidden></p>
+    <section class="box">
+      <header class="box-head">
+        <span class="verdict"></span>
+        <span class="box-meta"></span>
+      </header>
+      <div class="statement"></div>
+      <p class="detail"></p>
+      <table class="evidence" hidden>
+        <thead><tr><th scope="col" class="num">#</th><th scope="col">Passage</th><th scope="col">Similarity</th><th scope="col">Cited</th></tr></thead>
+        <tbody></tbody>
+        <tfoot><tr><td colspan="4">
+          <div class="timing">
+            <span class="timing-text"></span>
+            <span class="timing-bar" aria-hidden="true"><i class="t-search"></i><i class="t-model"></i></span>
+          </div>
+        </td></tr></tfoot>
+      </table>
+    </section>
+  </article>
+</template>
+
+<script src="/assets/app.js" defer></script>
+</body>
+</html>

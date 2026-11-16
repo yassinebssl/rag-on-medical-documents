@@ -21,3 +21,6 @@ docs/superpowers/
 site/node_modules/
 site/.wrangler/
 site/.cloudflare/
+
+# Design working files (mockups, review screenshots); PRODUCT.md and DESIGN.md are the records
+.impeccable/

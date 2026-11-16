@@ -75,6 +75,6 @@ The retrieval comparison and the sweep make no model call; both were run on the 
 
 \subsection{Hardware and software}
 
-Everything runs on a laptop CPU with no GPU: the machine that runs the evaluation has an Intel Core i5-8365U (8 threads) and 15~GiB of RAM. Colab was not needed. The software is Python~3.12 with PyTorch 2.15.0 (CPU build), sentence-transformers 6.3.0, chromadb 1.5.9, pypdf 7.1.0, cryptography 50.0.2, Gradio 6.32.0 and pytest 9.2.0, all pinned in \code{requirements.txt}. The tests use fakes for every model and the database, and run offline.
+Everything runs on a laptop CPU with no GPU: the machine that runs the evaluation has an Intel Core i5-8365U (8 threads) and 15~GiB of RAM. Colab was not needed. The software is Python~3.12 with PyTorch 2.15.0 (CPU build), sentence-transformers 6.3.0, chromadb 1.5.9, pypdf 7.1.0, cryptography 50.0.2, FastAPI 0.162.7, uvicorn 0.54.0, Gradio 6.32.0 and pytest 9.2.0, all pinned in \code{requirements.txt}. The tests use fakes for every model and the database, and run offline.
 
 \paragraph{Reproducibility.} Retrieval and the gates are deterministic for a given index. The model calls use temperature 0, but a hosted free model is not guaranteed to be deterministic: the same request for A19 gave two different outcomes (Section~\ref{sec:errors}). The reported numbers therefore come from the stored replies, which the cache keeps. A PubMed text fetched later may differ if Europe PMC updated the article; \code{check_eval_set.py} checks that the evidence quotes are still found.
