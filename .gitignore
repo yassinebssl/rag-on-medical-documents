@@ -16,3 +16,8 @@ vault/
 graphify-out/
 .claude/
 docs/superpowers/
+
+# Cloudflare deploy of the demo page
+site/node_modules/
+site/.wrangler/
+site/.cloudflare/
