@@ -17,16 +17,39 @@ def test_format_result_for_an_answer_marks_cited_sources():
     assert "Twice daily [WHO_09.pdf, p. 42]." in md and app.DISCLAIMER in md
     assert table == [[1, "WHO_09.pdf", "42", "0.812", "yes"], [2, "Title.", "-", "-", ""]]
 
-def test_format_result_for_a_refusal_says_why():
+def test_format_result_for_a_refusal_keeps_the_refusal_sentence_and_cites_nothing():
     md, table = app.format_result({"answer": rag.REFUSAL, "refused": True, "reason": "below_threshold",
                                    "hits": HITS, "cited": [], "best_similarity": 0.41})
-    assert rag.REFUSAL in md and "0.41" in md and "threshold" in md
+    assert rag.REFUSAL in md and app.DISCLAIMER in md
     assert [row[4] for row in table] == ["", ""]
+
+def test_verdict_for_a_refusal_says_why():
+    kind, label, detail = app.verdict({"answer": rag.REFUSAL, "refused": True, "reason": "below_threshold",
+                                       "hits": HITS, "cited": [], "best_similarity": 0.41})
+    assert kind == "refused" and "gate" in label and "0.41" in detail and "threshold" in detail
+
+def test_verdict_for_an_answer_counts_the_cited_passages():
+    assert app.verdict({"answer": "x", "refused": False, "reason": "answered", "hits": HITS, "cited": [1],
+                        "best_similarity": 0.8}) == ("answered", "Answered", "1 of 2 passages cited.")
+
+def test_verdict_for_an_uncited_answer_has_its_own_kind():
+    kind, _, detail = app.verdict({"answer": rag.REFUSAL, "refused": True, "reason": "uncited", "hits": HITS,
+                                   "cited": []})
+    assert kind == "uncited" and "did not cite" in detail
+
+def test_every_refusal_reason_has_a_verdict():
+    assert set(app.VERDICTS) == set(app.REASONS) | {"answered"}
+
+def test_sources_html_marks_cited_rows_and_escapes_the_source():
+    html = app.sources_html([[1, "A <b> title", "-", "0.812", "yes"], [2, "WHO_09.pdf", "42", "-", ""]])
+    assert html.count("<tr class=cited>") == 1 and "A &lt;b&gt; title" in html and "<b>" not in html
+    assert all(f">{h}</th>" in html for h in app.HEADERS)
+    assert app.sources_html([]) == ""
 
 def test_respond_with_an_empty_question_does_not_call_the_pipeline(monkeypatch):
     monkeypatch.setattr(rag, "answer_question", lambda *a, **k: 1 / 0)
-    md, table = app.respond("   ", rag.DEFAULT_MODEL, "Dense", 0.6, {})
-    assert md == "Type a question first." and table == []
+    status, md, table = app.respond("   ", rag.DEFAULT_MODEL, "Dense", 0.6, {})
+    assert "Type a question first." in status and md == "" and table == ""
 
 def test_respond_passes_bm25_in_both_hybrid_modes_and_the_reranker_only_with_the_gate(monkeypatch):
     calls = []
@@ -41,10 +64,10 @@ def test_respond_passes_bm25_in_both_hybrid_modes_and_the_reranker_only_with_the
         app.respond("q?", rag.DEFAULT_MODEL, mode, 0.55, ctx)
     assert calls == [(None, None, 0.55, 0.55), ("BM25", None, 0.55, 0.55), ("BM25", "CE", 0.55, 0.55)]
 
-def test_format_result_for_a_cross_encoder_refusal_gives_its_score():
-    md, _ = app.format_result({"answer": rag.REFUSAL, "refused": True, "reason": "below_rerank_threshold",
-                               "hits": HITS, "cited": [], "best_similarity": 0.7, "rerank_score": 0.123})
-    assert "0.12" in md and "cross-encoder" in md.lower()
+def test_verdict_for_a_cross_encoder_refusal_gives_its_score():
+    _, _, detail = app.verdict({"answer": rag.REFUSAL, "refused": True, "reason": "below_rerank_threshold",
+                                "hits": HITS, "cited": [], "best_similarity": 0.7, "rerank_score": 0.123})
+    assert "0.12" in detail and "cross-encoder" in detail.lower()
 
 def test_the_app_defaults_to_the_cross_encoder_gate_and_its_threshold():
     assert app.MODES[app.DEFAULT_MODE] == rag.RERANK_THRESHOLD and app.DEFAULT_MODE == app.RERANKED
@@ -55,8 +78,35 @@ def test_respond_reports_an_llm_error_instead_of_raising(monkeypatch):
         """Fail like an empty LLM reply."""
         raise RuntimeError("empty response from m:free")
     monkeypatch.setattr(rag, "answer_question", boom)
-    md, table = app.respond("q?", rag.DEFAULT_MODEL, "Dense", 0.6, {"embedder": None, "collection": None, "bm25": None, "api_key": "k"})
-    assert "empty response from m:free" in md and table == []
+    status, md, table = app.respond("q?", rag.DEFAULT_MODEL, "Dense", 0.6, {"embedder": None, "collection": None, "bm25": None, "api_key": "k"})
+    assert "empty response from m:free" in status and "verdict-error" in status and md == "" and table == ""
+
+def test_respond_escapes_the_error_text(monkeypatch):
+    def boom(*a, **k):
+        """Fail with markup in the message."""
+        raise RuntimeError("<script>x</script>")
+    monkeypatch.setattr(rag, "answer_question", boom)
+    status, _, _ = app.respond("q?", rag.DEFAULT_MODEL, "Dense", 0.6, {"embedder": None, "collection": None, "bm25": None, "api_key": "k"})
+    assert "<script>" not in status and "&lt;script&gt;" in status
+
+def test_respond_returns_the_status_the_answer_and_the_sources_table(monkeypatch):
+    res = {"answer": "Twice daily [WHO_09.pdf, p. 42].", "refused": False, "reason": "answered", "hits": HITS,
+           "cited": [1], "best_similarity": 0.81}
+    monkeypatch.setattr(rag, "answer_question", lambda *a, **k: res)
+    status, md, table = app.respond("q?", rag.DEFAULT_MODEL, "Dense", 0.6, {"embedder": None, "collection": None, "bm25": None, "api_key": "k"})
+    assert "verdict-answered" in status and "1 of 2 passages cited." in status
+    assert md.startswith("Twice daily") and "<table" in table and "WHO_09.pdf" in table
+
+def test_mark_citations_wraps_each_source_label_once_and_escapes_it():
+    hits = [{"source": "WHO_09.pdf", "page": 42}, {"source": "A <b> title", "page": None}]
+    md = app.mark_citations("Twice daily [WHO_09.pdf, p. 42][A <b> title]. Again [WHO_09.pdf, p. 42].", hits)
+    assert md.count('<span class="cite">[WHO_09.pdf, p. 42]</span>') == 2
+    assert '<span class="cite">[A &lt;b&gt; title]</span>' in md and "<b>" not in md
+
+def test_build_theme_has_one_look_in_light_and_dark():
+    theme = app.build_theme()
+    assert theme.body_background_fill_dark == theme.body_background_fill == "#FFFFFF"
+    assert theme.button_primary_background_fill_dark == theme.button_primary_background_fill
 
 def test_load_context_exits_with_one_line_when_the_key_is_missing(monkeypatch):
     monkeypatch.setattr(rag, "load_env", lambda: {})
