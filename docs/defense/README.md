@@ -1,6 +1,7 @@
 # Slides
 
 - `cp1/main.tex`: Checkpoint 1 (2026-11-22), 7 slides for 5 minutes.
+- `cp2/main.tex`: Checkpoint 2 (2026-12-04), 5 slides around the live demo (three cited answers, one refusal).
 - `final/main.tex`: oral defense (2026-12-13), 15 slides for 20 minutes.
 
 Each slide names its speaker in a `\note{}`. Red `TODO:` marks a value that is still missing.
@@ -12,11 +13,12 @@ Run pdflatex twice from the deck's own folder. The final deck reads `../../repor
 ```
 cd docs/defense/final && pdflatex main.tex && pdflatex main.tex
 cd docs/defense/cp1   && pdflatex main.tex && pdflatex main.tex
+cd docs/defense/cp2   && pdflatex main.tex && pdflatex main.tex
 ```
 
 You need TeX Live with the beamer `metropolis` theme, `FiraSans`, `FiraMono`, `tikz`, `adjustbox` and `booktabs`.
 
-The results slides read `docs/report/generated/retrieval_table.tex` and `summary_table.tex`. If a file is missing, the slide shows a TODO instead. Once the evaluation finishes, regenerate the tables and compile the deck again.
+The results slides (final deck and `cp2`) read `docs/report/generated/retrieval_table.tex` and `summary_table.tex`. If a file is missing, the slide shows a TODO instead. Once the evaluation finishes, regenerate the tables and compile the deck again.
 
 To print the speaker notes, add `\setbeameroption{show notes}` before `\begin{document}`.
 

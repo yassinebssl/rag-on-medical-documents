@@ -1,0 +1,122 @@
+% Checkpoint 2 deck (2026-12-04): live demo of the working version, results so far, what is left.
+% Compile from this directory: pdflatex main.tex (twice). See ../README.md.
+% Every number comes from data/raw/manifest.json, data/eval/questions.json,
+% results/*.csv, results/records.jsonl or the test suite. Check slides 2 and 5 again on 3 December.
+% Speaker for each slide: \note{} (hidden in the PDF; show with \setbeameroption{show notes}).
+\documentclass[12pt,aspectratio=169]{beamer}
+\usetheme[progressbar=frametitle,numbering=fraction]{metropolis}
+\usepackage[T1]{fontenc}
+\usepackage[sfdefault]{FiraSans}
+\usepackage[scale=0.85]{FiraMono}
+\usepackage{booktabs}
+\usepackage{adjustbox}
+
+\newcommand{\TODO}[1]{\textcolor{red}{\textbf{TODO:} #1}}
+% Show a table generated for the report (docs/report/generated/*.tex) on a slide: on a
+% slide the float wrapper and the caption are dropped, and the tabular is resized.
+\newcommand{\slidetable}[2]{%
+  \IfFileExists{#1}{%
+    \begingroup
+      \renewenvironment{table}[1][]{\ignorespaces}{\unskip}%
+      \renewcommand{\caption}[2][]{\ignorespaces}%
+      \renewcommand{\label}[1]{\ignorespaces}%
+      \resizebox{\linewidth}{!}{\input{#1}\unskip}%
+    \endgroup
+  }{\TODO{#2}}}
+\setbeamertemplate{note page}[plain]
+% Metropolis draws the title page in a box of \paperheight, which is reported as an
+% overfull \vbox on every deck; the same layout in a shorter box fits.
+\makeatletter
+\setbeamertemplate{title page}{%
+  \begin{minipage}[c][0.85\textheight]{\textwidth}
+    \vfill
+    \usebeamertemplate*{title}
+    \usebeamertemplate*{subtitle}
+    \usebeamertemplate*{title separator}
+    \usebeamertemplate*{author}
+    \usebeamertemplate*{date}
+    \usebeamertemplate*{institute}
+    \vfill
+  \end{minipage}}
+\makeatother
+
+\title{Trustworthy RAG on Medical Documents}
+\subtitle{Checkpoint 2: working version, live demo}
+\author{Boussoualim Yassine \and Benahcene Mohamed Wassim \and Aissaoui Anes Safouane \and Djerdali Mohamed Achraf}
+\setbeamerfont{author}{size=\small}
+\setbeamerfont{date}{size=\small}
+\institute{LLM Final Projects 2026--2027, Prof.\ A.\ Moussaoui, Project 2\\
+  Group \TODO{group number} \quad \TODO{school}}
+\date{4 December 2026}
+
+\begin{document}
+
+\begin{frame}
+  \titlepage
+  \note{Speaker: Djerdali Mohamed Achraf. Opens: the pipeline of Checkpoint 1 runs end to end, and we show it live (10 s).}
+\end{frame}
+
+\begin{frame}{What runs today}
+  \begin{itemize}
+    \item 50 documents ingested: 1530 records $\to$ 3410 chunks in Chroma
+    \item Hybrid retrieval: BGE-M3 + our own BM25, fused by RRF, top 5
+    \item Refusal gate: MiniLM cross-encoder, threshold 0.5
+    \item Free LLM answers from passages [1]--[5]; citations are checked
+    \item Gradio app; 113 automated tests pass
+  \end{itemize}
+  \vfill
+  \small The pipeline and the app were complete on 15 November. Since then: the LLM evaluation, at 50 free requests a day.
+  \note{Speaker: Boussoualim Yassine. Same architecture as the Checkpoint 1 slide, nothing planned is missing. The Git history shows the dates. The work since Checkpoint 1 is the evaluation run, the error analysis and the documents.}
+\end{frame}
+
+\begin{frame}{Live demo}
+  \footnotesize
+  \begin{tabular}{@{}p{0.6\linewidth}p{0.36\linewidth}@{}}
+    \toprule
+    Question & Expected \\
+    \midrule
+    How long should parenteral artesunate be given to a patient with severe malaria? & at least 24\,h, until oral treatment is tolerated \\
+    When should antiretroviral therapy be started in a person living with HIV who begins tuberculosis treatment? & within two weeks, any CD4 count \\
+    What is the minimum number of antenatal care contacts recommended during pregnancy? & eight; WHO antenatal care, p.\,119 \\
+    \midrule
+    What is the first-line topical treatment for scabies? & refusal: gate 0.01, below 0.5 \\
+    \bottomrule
+  \end{tabular}
+  \smallskip
+
+  Mode: \emph{Hybrid + cross-encoder gate}. Backup if the network fails: \TODO{demo\_video.mp4}
+  \note{Speaker: Djerdali Mohamed Achraf runs the app; Aissaoui Anes Safouane comments on the gate. Launch with .venv/bin/python src/app.py, then open http://127.0.0.1:7860. Before the session: index built, key in .env, free requests left today (each answer costs one). Questions 1, 2 and 4 are the examples under the question box; type question 3. For each answer show the sources table and the Cited column. For scabies show the refusal reason: the model is not called, so the reply takes under a second. Evaluation ids: A06, A09, A12, O01.}
+\end{frame}
+
+\begin{frame}{Results so far}
+  \slidetable{../../report/generated/summary_table.tex}{summary table (docs/report/generated/summary\_table.tex)}
+  \medskip
+
+  \small 40 questions: 20 answerable, 10 out-of-corpus, 10 held-out. Baselines: the LLM alone (\texttt{no\_rag}) and BM25 only (\texttt{bm25\_rag}).
+  \note{Speaker: Benahcene Mohamed Wassim. Read the RAG rows against no\_rag: the refusal columns are the point. One answerable question is refused (A19): the passage with the dose ranks 7th after fusion, outside the top 5, so the refusal is correct for what the model saw and the miss is in retrieval. Regenerate the table before compiling; rows still running show a smaller n.}
+\end{frame}
+
+\begin{frame}{What is left before the hand-in}
+  \begin{columns}[T]
+    \begin{column}{0.48\linewidth}
+      \textbf{Done}
+      \begin{itemize}
+        \item pipeline, app, tests
+        \item retrieval comparison (9 variants)
+        \item report, technical doc, user manual: drafts
+      \end{itemize}
+    \end{column}
+    \begin{column}{0.48\linewidth}
+      \textbf{Left}
+      \begin{itemize}
+        \item end of the LLM evaluation run
+        \item human rating, error analysis
+        \item demo video, peer evaluations
+        \item flash drive: 12 Dec; defense: 13 Dec
+      \end{itemize}
+    \end{column}
+  \end{columns}
+  \note{Speaker: Boussoualim Yassine. Update both lists on 3 December from scripts/build\_flash\_drive.py, which prints every required file that is still missing. Closes and takes questions.}
+\end{frame}
+
+\end{document}
