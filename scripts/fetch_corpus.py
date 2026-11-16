@@ -1,6 +1,6 @@
 """Download the open medical corpus for the RAG project.
 
-Sources (see vault/01-Project-Brief.md):
+Sources (the project brief's recommended subset):
 - WHO guidelines and publications, via the WHO IRIS public REST API.
 - PubMed Central open-access articles, via the Europe PMC REST API.
 

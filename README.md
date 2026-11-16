@@ -194,4 +194,3 @@ References:
 - Cross-encoders: Nogueira and Cho, "Passage Re-ranking with BERT", 2019, https://arxiv.org/abs/1901.04085; MedCPT: Jin et al., Bioinformatics, 2023, https://doi.org/10.1093/bioinformatics/btad651; https://huggingface.co/cross-encoder/ms-marco-MiniLM-L6-v2 and https://huggingface.co/BAAI/bge-reranker-v2-m3
 - RAGAS: Es et al., "RAGAS: Automated Evaluation of Retrieval Augmented Generation", 2023, https://arxiv.org/abs/2309.15217, and https://docs.ragas.io/en/stable/concepts/metrics/available_metrics/context_precision/
 
-Tools used: Claude (Anthropic) was used to write code and documentation.

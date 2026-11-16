@@ -112,7 +112,7 @@ The check is narrow: the quotes come from 19 of the 50 documents, only 8 of them
 
 ## Step 3: Embed the chunks and build the index
 
-An **embedding** is a list of numbers a model computes for a text, so that texts with similar meaning get vectors pointing in similar directions. The project uses `BAAI/bge-m3` through sentence-transformers; the architecture note `vault/04-Architecture.md` calls it the brief's choice, multilingual and strong on medical text.
+An **embedding** is a list of numbers a model computes for a text, so that texts with similar meaning get vectors pointing in similar directions. The project uses `BAAI/bge-m3` through sentence-transformers; the project brief names it, multilingual and strong on medical text.
 
 **Cosine similarity** measures how close two directions are: the dot product of two vectors divided by the product of their lengths, 1 for the same direction. For vectors of length 1 it reduces to the dot product. For example, (3, 4) and (4, 3) normalised are (0.6, 0.8) and (0.8, 0.6), and their cosine similarity is 0.48 + 0.48 = 0.96.
 
@@ -252,7 +252,7 @@ Answer (with citations):"""
 
 From this step on, your code sends the question and five passages to OpenRouter. The README states that the corpus holds no patient data, so patient data can only leave through what you type: never type anything that identifies a patient. `load_env` in `src/rag.py` reads the `KEY=VALUE` lines of `.env` into a dict without printing them.
 
-Only free models are used: the docstring of `src/rag.py` calls this a project rule, and `vault/13-Decisions-Log.md` records it (every model id must end in `:free`). It is enforced in code because the model is only a string in the request body, so a typo in `.env` or on the command line would send every question to a paid model. `check_free` in `src/rag.py` is the stop:
+Only free models are used: the docstring of `src/rag.py` calls this a project rule (every model id must end in `:free`). It is enforced in code because the model is only a string in the request body, so a typo in `.env` or on the command line would send every question to a paid model. `check_free` in `src/rag.py` is the stop:
 
 ```python
 def check_free(model):
@@ -382,7 +382,7 @@ Embeddings capture meaning and can miss an exact string, such as the drug name z
   score(q, d) = sum over t in q of idf(t) * tf * (k1 + 1) / (tf + k1 * (1 - b + b * dl / avgdl))
 ```
 
-You write it by hand with the standard library, for reasons in the project notes: the course asks for two baselines and BM25 is one (decision D7 in `vault/04-Architecture.md`), and `vault/12-Skills-Stack.md` chose a from-scratch sparse baseline, which `vault/03-Grading-Plan.md` counts as originality. The docstring of `src/bm25.py` credits its sources, and your copy must keep that credit: term and document frequencies and idf follow https://stevenloria.com/tf-idf/, tokenizing, indexing and ranking follow https://boyter.org/2010/08/build-vector-space-search-engine-python/ (both listed at https://github.com/codecrafters-io/build-your-own-x), and the formula is Okapi BM25 from Robertson and Zaragoza, "The Probabilistic Relevance Framework: BM25 and Beyond", 2009. Their idf has no 1 inside the logarithm, log((N - df + 0.5) / (df + 0.5)), and it is negative for a term found in more than half the chunks. The idf above adds 1 inside the logarithm, which keeps it positive; that variant is the one of Apache Lucene's BM25Similarity and of the Wikipedia page "Okapi BM25", and the docstring credits both.
+You write it by hand with the standard library, for two reasons: the course asks for two baselines and BM25 is one, and a sparse baseline written from scratch counts as originality in the grading grid. The docstring of `src/bm25.py` credits its sources, and your copy must keep that credit: term and document frequencies and idf follow https://stevenloria.com/tf-idf/, tokenizing, indexing and ranking follow https://boyter.org/2010/08/build-vector-space-search-engine-python/ (both listed at https://github.com/codecrafters-io/build-your-own-x), and the formula is Okapi BM25 from Robertson and Zaragoza, "The Probabilistic Relevance Framework: BM25 and Beyond", 2009. Their idf has no 1 inside the logarithm, log((N - df + 0.5) / (df + 0.5)), and it is negative for a term found in more than half the chunks. The idf above adds 1 inside the logarithm, which keeps it positive; that variant is the one of Apache Lucene's BM25Similarity and of the Wikipedia page "Okapi BM25", and the docstring credits both.
 
 The `BM25` class in `src/bm25.py` is an **inverted index**: for each term, the chunks that contain it and how often. `tokenize` lowercases and keeps runs of letters and digits, `idf` computes the first line of the formula, and `search` adds up the second:
 
@@ -658,4 +658,3 @@ The three rules still hold: not medical advice, nothing that identifies a patien
 - MedCPT: Jin et al., Bioinformatics, 2023, https://doi.org/10.1093/bioinformatics/btad651, and https://huggingface.co/BAAI/bge-reranker-v2-m3, the two cross-encoders compared with MiniLM in Step 11.
 - Es et al., "RAGAS: Automated Evaluation of Retrieval Augmented Generation", 2023, https://arxiv.org/abs/2309.15217, and https://docs.ragas.io/en/stable/concepts/metrics/available_metrics/context_precision/
 
-Tools used: Claude (Anthropic) was used to write the project's code and documentation, including this tutorial.

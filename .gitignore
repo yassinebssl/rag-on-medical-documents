@@ -1,4 +1,4 @@
-# Data and secrets: never commit (see vault/02-Rules-and-Deadlines.md)
+# Data and secrets: never commit
 data/raw/*
 !data/raw/manifest.json
 data/processed/
@@ -7,8 +7,11 @@ chroma_db/
 __pycache__/
 *.pyc
 .ipynb_checkpoints/
-graphify-out/cache/
-.obsidian/workspace*
 .venv/
 .pytest_cache/
 results/
+
+# Planning notes and tool output, kept out of the hand-in
+vault/
+graphify-out/
+.claude/
