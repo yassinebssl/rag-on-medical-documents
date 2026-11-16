@@ -1,7 +1,7 @@
 \section{Error analysis (preliminary)}
 \label{sec:errors}
 
-This analysis uses the 85 records of the first day (\code{results/records.jsonl}, and \path{results/backup_before_A19_clear/} for A19), the run log and the retrieval comparison. It is preliminary: \code{bm25_rag}, \code{rag_dense} and the second model have no records yet, and no answer has been rated. Correctness is left to the human rating. \TODO{extend with the failures of \code{bm25_rag}, \code{rag_dense} and the second model, any \code{uncited} reply, and the answers rated incorrect or unsafe in the rating sheet}
+This analysis uses the 132 records of the first two days (\code{results/records.jsonl}, and \path{results/backup_before_A19_clear/} for the first replies to A19), the run logs and the retrieval comparison. It is preliminary: \code{bm25_rag} has 12 records, \code{rag_dense} and the second model have none, and no answer has been rated. Correctness is left to the human rating. \TODO{extend with the failures of \code{bm25_rag}, \code{rag_dense} and the second model, any \code{uncited} reply, and the answers rated incorrect or unsafe in the rating sheet}
 
 \subsection{Held-out questions that passed the gates}
 
@@ -34,20 +34,24 @@ N10 & maintenance dose of sotatercept & 0.638 & model & 0.790 & model \\
 
 \paragraph{What caught them.} The model's own refusal, as the prompt instructs. It held every time here, but it is the least controlled defence: another model may answer from memory and cite a passage that is merely on topic, which the citation check would accept.
 
-\paragraph{A caution on the labels.} When passages score as high as for N06 (0.977) and N08 (0.948), the fact may be in the corpus in words the keyword search missed, and the refusal would then be a missed answer. \TODO{check by reading the retrieved passages of N06 and N08 (and N10) whether the corpus states the asked value; if it does, report it and do not count that refusal as correct}
+\paragraph{A check on the labels.} When passages score as high as for N06 (0.977) and N08 (0.948), the fact could be in the corpus after all, and the refusal would then be a missed answer. We searched the text of all 3,410 chunks for the asked values. The 12 chunks that mention the tuberculin test give no size in millimetres (N06); none of the 49 chunks on pre-eclampsia mentions aspirin (N08); the 13 chunks that mention sotatercept, from two reviews, give no dose (N10); and no chunk mentions thyroid cancer (N02) or the REDUCE-IT trial (N04). A keyword search can miss a paraphrase, but it found nothing against the five refusals.
 
 \subsection{A refusal the passages justify, hidden by the labels (A19)}
 
-A19 asks for the starting dose of basal insulin added to a GLP-1 receptor agonist. On the first day, the model spent the whole 600-token budget on hidden reasoning for \code{rag_rerank} and returned no text; the same request, sent again for \code{rag_hybrid}, came back as the refusal sentence. \code{call_llm} now resends once with 4,000 tokens, and temperature 0 did not make the hosted model deterministic. Asked again on 2026-11-16, the model refused for both systems. The refusal is right for the passages it was given: all five come from the expected article, but none holds the evidence sentence (``starting at 10 units/day or 0.1--0.2 units/kg/day''). The chunk that holds it ranks 8th in both dense retrieval and BM25, and 7th after fusion, just outside the five. Our labels hide this miss: a PubMed article has no page, so every passage of the right article counts as relevant and as a page hit. The fault is in retrieval, not in the model, and only a passage-level label would show it.
+A19 asks for the starting dose of basal insulin added to a GLP-1 receptor agonist. On the first day, the model spent the whole 600-token budget on hidden reasoning for \code{rag_rerank} and returned no text; the same request, sent again for \code{rag_hybrid}, came back as the refusal sentence. \code{call_llm} now resends once with 4,000 tokens, and temperature 0 did not make the hosted model deterministic. Asked again on 2026-11-16, the model refused for both systems. The refusal is right for the passages it was given: all five come from the expected article, but none holds the evidence sentence (``starting at 10 units/day or 0.1--0.2 units/kg/day''). The chunk that holds it ranks 8th in both dense retrieval and BM25, and 7th after fusion, just outside the five. Our labels hide this miss: a PubMed article has no page, so every passage of the right article counts as relevant and as a page hit. The fault is in retrieval, not in the model, and only a passage-level label would show it. The \code{no_rag} baseline answered A19 from memory with the values of the evidence sentence: here the retrieval miss cost an answer that the model alone gave.
 
 \subsection{Confident baseline answers from other guidelines}
 
-The \code{no_rag} baseline answered all six recorded questions without any refusal. Two answers differ from the expected answer:
+The \code{no_rag} baseline answered 37 of the 40 questions. We read its 19 answers to answerable questions against the expected answers. Six state another value than the corpus:
 \begin{itemize}
-\item A02 asks which blood pressure values define stage~2 hypertension. The expected answer, from a WHO guideline in the corpus, is 160~mmHg systolic or 100~mmHg diastolic and above. The baseline gives 140/90~mmHg, from the 2017 ACC/AHA guideline, and adds in a note that other guidelines use 160/100.
-\item A03 asks for the maximum daily sodium intake for adults. The expected answer, from the WHO sodium guideline, is less than 2~g of sodium a day. The baseline gives less than 2,300~mg and attributes it to several bodies, WHO among them.
+\item A02 (stage~2 hypertension). Expected, from a WHO guideline: 160/100~mmHg and above. Baseline: 140/90~mmHg, from the 2017 ACC/AHA guideline, with a note that other guidelines use 160/100.
+\item A03 (maximum daily sodium). Expected, from the WHO sodium guideline: less than 2~g. Baseline: less than 2,300~mg, attributed to several bodies, WHO among them.
+\item A05 (LDL cholesterol goal in diabetes). Expected: below 100~mg/dL. Baseline: below 70~mg/dL, or below 55 with cardiovascular disease, from ADA and ESC/EAS.
+\item A09 (start of antiretroviral therapy during tuberculosis treatment). Expected: within two weeks, whatever the CD4 count. Baseline, attributed to WHO: within 2 weeks below 50 cells/mm$^3$, within 8 weeks otherwise.
+\item A14 (maximum paracetamol dose for older people under 50~kg). Expected: 60~mg/kg a day. Baseline: 3~g a day; at 40~kg, 60~mg/kg is 2.4~g.
+\item A18 (SGLT2 inhibitors under NICE). Expected: preferred first-line therapy, with metformin. Baseline: metformin first, SGLT2 inhibitors first-line only in high-risk groups.
 \end{itemize}
-Both follow real guidelines of other bodies or years, which is the danger: the answer cannot be traced, mixes guidelines without saying which applies, and nothing flags it. The RAG systems gave the corpus's values, with the WHO page. \TODO{human rating decides whether these two answers count as incorrect; report the \code{no_rag} correctness rate}
+A01 gets no single value (the answer lists the thresholds of several guidelines) and A17 is refused. The other twelve contain the expected fact, sometimes among other values. The six answers follow real guidelines of other bodies or years, which is the danger: the answer cannot be traced, mixes guidelines without saying which applies, and nothing flags it. The RAG systems gave the corpus's values, with their source. The baseline also answered the 10 held-out questions and 8 of the 10 out-of-corpus ones, where the corpus offers nothing to check the answer against. \TODO{the human rating decides which of these answers count as incorrect; report the \code{no_rag} correctness rate}
 
 \subsection{Retrieval misses that did not hurt the answer}
 

@@ -7,9 +7,10 @@
 \toprule
 Role & System & Model & n & Answer & Ref. O & Ref. N & Hit & CP & Faith. & Lat. (s) \\
 \midrule
-baseline & \texttt{no\_rag} & nvidia/nemotron-3-ultra-550b-a55b:free & 6 & 1.0 & -- & -- & -- & -- & -- & 9.31 \\
-RAG & \texttt{rag\_hybrid} & nvidia/nemotron-3-ultra-550b-a55b:free & 40 & 0.95 & 1.0 & 1.0 & 1.0 & 0.911 & 1.0 (19) & 5.18 \\
-RAG & \texttt{rag\_rerank} & nvidia/nemotron-3-ultra-550b-a55b:free & 39 & 1.0 & 1.0 & 1.0 & 1.0 & 0.906 & 1.0 (19) & 6.03 \\
+baseline & \texttt{no\_rag} & nvidia/nemotron-3-ultra-550b-a55b:free & 40 & 0.95 & 0.2 & 0.0 & -- & -- & -- & 8.11 \\
+baseline & \texttt{bm25\_rag} & nvidia/nemotron-3-ultra-550b-a55b:free & 12 & 1.0 & -- & -- & 1.0 & 0.989 & 1.0 (12) & 6.12 \\
+RAG & \texttt{rag\_hybrid} & nvidia/nemotron-3-ultra-550b-a55b:free & 40 & 0.95 & 1.0 & 1.0 & 1.0 & 0.911 & 1.0 (19) & 5.27 \\
+RAG & \texttt{rag\_rerank} & nvidia/nemotron-3-ultra-550b-a55b:free & 40 & 0.95 & 1.0 & 1.0 & 1.0 & 0.911 & 1.0 (19) & 6.17 \\
 \bottomrule
 \end{tabular}}
 \end{table}
