@@ -88,7 +88,7 @@ Passages: \{context\}\quad Question: \{question\}\quad Answer (with citations):
 
 The last two instructions are the guardrails of our architecture notes. Articles cite their own references as [12] or [3,~4]; a copied [3] would pass the check while pointing to the wrong passage, so \code{format_context} rewrites such markers to (12) and (3,~4) in the prompt.
 
-The model is called through the OpenRouter API \citep{openrouter} with temperature 0 and a budget of 600 tokens. Only free models are allowed: \code{check_free}, the first statement of \code{call_llm}, raises an error unless the model id ends in \code{:free}, so a typo cannot reach a paid model. \code{call_llm} retries rate limits, server errors and empty replies up to four attempts (pauses of 10, 20 and 40 seconds), stops at once when the daily quota is used up, and resends once with 4,000 tokens a reply that a reasoning model left empty after using the whole budget on hidden reasoning (commit \code{514c930}).
+The model is called through the OpenRouter API \citep{openrouter} with temperature 0 and a budget of 600 tokens. Only free models are allowed: \code{check_free}, the first statement of \code{call_llm}, raises an error unless the model id ends in \code{:free}, so a typo cannot reach a paid model. \code{call_llm} retries rate limits, server errors and empty replies up to four attempts (pauses of 10, 20 and 40 seconds), stops at once when the daily quota is used up, and resends once with 4,000 tokens a reply that a reasoning model left empty after using the whole budget on hidden reasoning (commit \code{98ad7c7}).
 
 \subsection{Citation check}
 

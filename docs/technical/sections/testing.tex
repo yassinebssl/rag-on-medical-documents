@@ -5,7 +5,7 @@ The test suite is in \code{tests/} and runs with \code{.venv/bin/pytest} from th
 (\code{pytest.ini} puts \code{src/} on the import path). It uses fakes for the embedding model, the
 Chroma collection, the cross-encoder and the language model (\code{tests/conftest.py}), and replaces
 \code{urlopen} and \code{time.sleep} in the network tests. So it needs no model, no database and no
-network, and it sends nothing to OpenRouter. On 15 November 2026, at commit \code{514c930}, the suite
+network, and it sends nothing to OpenRouter. On 15 November 2026, at commit \code{98ad7c7}, the suite
 ran 102 tests and all passed.
 
 \begin{table}[H]

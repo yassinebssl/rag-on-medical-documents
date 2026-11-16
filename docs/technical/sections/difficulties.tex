@@ -25,7 +25,7 @@ Europe PMC answers HTTP 403 when a script asks for an article PDF, while its ful
 reliable. \emph{Solution:} \code{fetch_corpus.py} keeps the text of every \code{<p>} element and
 rejects a body under 2{,}000 characters. A PubMed article has no page, so it is cited by its title.
 
-\paragraph{Reference markers taken for citations} (\code{e954e62}).
+\paragraph{Reference markers taken for citations} (\code{d79c6fc}).
 Articles cite their own references as \code{[12]} or \code{[3, 4]}, the same shape as our citations.
 A copied \code{[3]} would pass the check while pointing at the wrong passage, and a copied
 \code{[12]} would turn a good answer into a refusal. \emph{Solution:} \code{format_context} shows
@@ -39,7 +39,7 @@ as 401 for a bad key, are raised at once. The app shows ``The model call failed:
 crashing. In the evaluation, a model that fails three questions in a row is dropped for the rest of
 that run.
 
-\paragraph{50 free requests a day} (\code{23d0209}, \code{9d809f7}).
+\paragraph{50 free requests a day} (\code{c4c7767}, \code{37e9599}).
 OpenRouter allows this account 50 free-model requests per UTC day. One model with the judge on the
 original 30 questions needs at most 170 requests with the reply cache (210 without), so the
 evaluation cannot run in one day. \emph{Solution:} a 429 whose body names
@@ -48,7 +48,7 @@ then stops, writes the summary of the records so far, and resumes where it stopp
 \code{scripts/run_evaluation.py} runs once a day, checks the requests left before sending anything,
 refuses a second run at the same time (lock file) and logs everything.
 
-\paragraph{Reasoning models use up \code{max_tokens}} (\code{30bcabb}, \code{514c930}).
+\paragraph{Reasoning models use up \code{max_tokens}} (\code{38ee466}, \code{98ad7c7}).
 The default model reasons before it writes, and the budget counts that hidden reasoning. The judge
 needs about 1{,}000 tokens of reasoning to split an answer into claims, so with 600 tokens it never
 wrote its JSON: the judge now gets 4{,}000 tokens. On question A19, the answer itself used all 600
@@ -58,12 +58,12 @@ daily request on it. \emph{Solution:} \code{call_llm} resends such a request onc
 4{,}000 tokens, and raises only if that is cut too. A reply that fits in 600 tokens is unchanged, so
 the stored replies stay valid.
 
-\paragraph{The \code{no_rag} baseline refused everything} (\code{30bcabb}).
+\paragraph{The \code{no_rag} baseline refused everything} (\code{38ee466}).
 Its prompt named ``the provided documents'' in the refusal sentence without giving any, so the model
 refused every question. The prompt now says that no documents are given and asks the model to
 answer from its own knowledge.
 
-\paragraph{Identical requests sent twice} (\code{0151e2f}).
+\paragraph{Identical requests sent twice} (\code{47672da}).
 \code{rag_hybrid} and \code{rag_rerank} retrieve the same passages. For a question that both gates
 let through, they sent the same prompt and then the same judge prompt. \emph{Solution:} every model
 call of \code{run} goes through \code{ReplyCache}, keyed by the SHA-256 of the model, the prompt and
@@ -72,13 +72,13 @@ file holds neither the prompt nor the key). The second system reuses the replies
 per such question and model, and the two systems now differ only by their gate. A reused answer is
 marked \code{reused} and its latency includes the original call, so latencies stay comparable.
 
-\paragraph{The cosine gate had almost no margin} (\code{3e19817}, \code{174cef4}).
+\paragraph{The cosine gate had almost no margin} (\code{2b52688}, \code{560a4b4}).
 See Section~\ref{sec:choices}: O06 passed under 0.6 by 0.012. The MiniLM cross-encoder gate, at its
 untuned 0.5 boundary, leaves a wide gap (0.156 against 0.870) and became the default mode. Scoring
 one passage at a time and stopping at the first that passes cut the time of an answerable question
 from about 0.7\,s to 0.3\,s.
 
-\paragraph{The question set could not tell the gates apart} (\code{48739a1}).
+\paragraph{The question set could not tell the gates apart} (\code{7ffee2b}).
 On the original 30 questions, every gated system refuses every out-of-corpus question and answers
 every answerable one, and three of the out-of-corpus questions are general-knowledge trivia.
 \emph{Solution:} 10 held-out questions, N01 to N10, on topics the corpus covers (hypertension,
@@ -96,4 +96,4 @@ The evaluation stores the threshold in each record and refuses to mix records ma
 thresholds. A failed judge call writes no record, so the next run takes the answer from the cache
 and sends only the judge request. A line of a JSONL file cut by a crash is skipped with a warning.
 \code{load_context} reports ``index is empty'' only for Chroma's \code{NotFoundError}, so other
-database errors are not hidden (\code{c354aa8}).
+database errors are not hidden (\code{2888462}).
